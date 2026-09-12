@@ -99,8 +99,12 @@ One phase at a time, in order. Never scaffold a later phase early. After each ph
 2. `.\mvnw.cmd test` passes;
 3. write/update `docs/learning/NN-<phase>.md` (why this tech, how each technique works,
    interview Q&A, YouTube topics);
-4. commit `Phase N: <descriptive summary>`;
-5. STOP and wait for the owner's confirmation.
+4. append a dated entry to `docs/learning/project-log.md`: what was done, decisions
+   (add to the register), problems hit and fixes, the owner's to-do list, status table
+   and commit hash; keep its YouTube study plan complete (clickable YouTube *search*
+   links, never invented video URLs);
+5. commit `Phase N: <descriptive summary>` (message from a file: `git commit -F <file>`);
+6. STOP and wait for the owner's confirmation.
 
 ## Phases
 | # | Phase | Status |
