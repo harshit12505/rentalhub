@@ -1,0 +1,11 @@
+# Settings for running on your own machine. Active by default (see application.yml).
+# The database/Redis defaults in application.yml already point at docker-compose.yml.
+
+spring:
+  thymeleaf:
+    # Re-read templates on every request so edits appear without a restart.
+    cache: false
+
+logging:
+  level:
+    com.rentalhub: DEBUG

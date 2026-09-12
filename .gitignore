@@ -1,0 +1,19 @@
+# Build output
+target/
+*.class
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Local secrets — never commit real keys
+.env
+.env.*
+
+# Logs
+*.log

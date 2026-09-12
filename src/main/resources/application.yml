@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: rentalhub
+
+  profiles:
+    # With no profile chosen, run as "local" (see application-local.yml).
+    # Render sets SPRING_PROFILES_ACTIVE=render instead.
+    default: local
+
+  datasource:
+    # Assembled from parts rather than taken as one URL: Render provides host, port,
+    # database, user and password separately, and its ready-made connection string
+    # uses the postgres:// scheme, which the JDBC driver does not accept.
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:rentalhub}
+    username: ${DB_USERNAME:rentalhub}
+    password: ${DB_PASSWORD:rentalhub}
+
+  jpa:
+    hibernate:
+      # Flyway owns the schema. 'validate' makes Hibernate check at startup that the
+      # entities match the tables and refuse to start if they drift; it never alters
+      # the schema itself.
+      ddl-auto: validate
+    # Off: the database session closes when the service method returns, so a view can
+    # never trigger surprise lazy-loading queries. Services load what views need.
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    locations: classpath:db/migration
+
+  messages:
+    basename: messages
+    encoding: UTF-8
+    # A missing translation falls back to messages.properties (English), never to
+    # whatever language the server's operating system happens to be set to.
+    fallback-to-system-locale: false
+
+server:
+  # Render assigns the port through the PORT environment variable.
+  port: ${PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

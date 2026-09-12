@@ -1,0 +1,37 @@
+# Runs ONLY the two external services RentalHub needs.
+# The app itself runs from your IDE / `mvn spring-boot:run` so you get fast restarts.
+#
+#   docker compose up -d
+#
+services:
+  postgres:
+    # Official pgvector image = Postgres 16 with the vector extension already available.
+    image: pgvector/pgvector:pg16
+    container_name: rentalhub-postgres
+    environment:
+      POSTGRES_DB: rentalhub
+      POSTGRES_USER: rentalhub
+      POSTGRES_PASSWORD: rentalhub
+    ports:
+      - "5432:5432"
+    volumes:
+      - rentalhub-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rentalhub -d rentalhub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: rentalhub-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  rentalhub-pgdata:
