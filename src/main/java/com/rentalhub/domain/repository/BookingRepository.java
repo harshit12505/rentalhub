@@ -14,6 +14,9 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByGuestIdOrderByCheckInDesc(Long guestId);
 
+    /** Any booking at all, whatever its status: a listing with history must not be deleted. */
+    boolean existsByPropertyId(Long propertyId);
+
     /**
      * Does a live booking already overlap these dates?
      * Two ranges overlap when each one starts before the other ends.

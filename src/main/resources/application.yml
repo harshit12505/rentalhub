@@ -32,6 +32,19 @@ spring:
   flyway:
     locations: classpath:db/migration
 
+  data:
+    redis:
+      # One URL, because that is what Render's Key Value service hands out.
+      # Locally it points at the Redis in docker-compose.yml.
+      url: ${REDIS_URL:redis://localhost:6379}
+      # Fail fast. Redis is an optimisation: after this long a cache call gives up
+      # and the request reads the database instead of waiting on a sick Redis.
+      timeout: 500ms
+      connect-timeout: 1s
+      # Redis is only a cache here, never a Spring Data repository store.
+      repositories:
+        enabled: false
+
   messages:
     basename: messages
     encoding: UTF-8
@@ -47,4 +60,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        # caches: GET /actuator/caches lists every cache and its type
+        include: health,info,caches
+
+# Cache tuning; see CacheSettings for what each value means and why.
+rentalhub:
+  cache:
+    # Bump the version when a cached record's shape changes, so new code never
+    # reads old-shaped JSON; old keys simply expire.
+    key-prefix: "rentalhub:v1:"
+    listing-local-ttl: 30s
+    listing-local-max-size: 10000
+    listing-shared-ttl: 10m
+    search-ttl: 5m

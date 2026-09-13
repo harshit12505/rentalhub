@@ -2,7 +2,7 @@ package com.rentalhub.factory.impl;
 
 import com.rentalhub.domain.model.Cabin;
 import com.rentalhub.domain.model.enums.PropertyType;
-import com.rentalhub.dto.CreatePropertyRequest;
+import com.rentalhub.dto.PropertyRequest;
 import com.rentalhub.exception.PropertyValidationException;
 import com.rentalhub.factory.AbstractPropertyCreator;
 import com.rentalhub.factory.AttributeKind;
@@ -31,7 +31,7 @@ public class CabinCreator extends AbstractPropertyCreator<Cabin> {
             AttributeSpec.required(DISTANCE, AttributeKind.DECIMAL));
 
     public CabinCreator() {
-        super(Cabin.class);
+        super(Cabin.class, Cabin::new);
     }
 
     @Override
@@ -45,7 +45,7 @@ public class CabinCreator extends AbstractPropertyCreator<Cabin> {
     }
 
     @Override
-    protected void validateSpecific(CreatePropertyRequest request, TypeAttributes attributes) {
+    protected void validateSpecific(PropertyRequest request, TypeAttributes attributes) {
         BigDecimal distance = attributes.decimal(DISTANCE);
         if (distance.signum() < 0 || distance.compareTo(MAX_DISTANCE_KM) > 0) {
             throw PropertyValidationException.onField(
@@ -54,10 +54,8 @@ public class CabinCreator extends AbstractPropertyCreator<Cabin> {
     }
 
     @Override
-    protected Cabin build(TypeAttributes attributes) {
-        Cabin cabin = new Cabin();
+    protected void applyTypeFields(Cabin cabin, TypeAttributes attributes) {
         cabin.setHeatingType(attributes.choice(HEATING));
         cabin.setDistanceToTownKm(attributes.decimal(DISTANCE));
-        return cabin;
     }
 }

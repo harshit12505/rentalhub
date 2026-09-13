@@ -18,7 +18,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * One request object for every property type.
+ * One request object for every property type, used both to create a listing (POST)
+ * and to replace one (PUT). PUT is a full replacement: the body is the listing's
+ * complete new state, checked by the same per-type rules as creation.
  *
  * Fields every listing has are typed properties. Fields only one type has (a villa's
  * plot area, a cabin's heating) travel in {@link #attributes} as name → text, and the
@@ -32,7 +34,7 @@ import java.util.Map;
  */
 @Getter
 @Setter
-public class CreatePropertyRequest {
+public class PropertyRequest {
 
     @NotNull(message = "{property.type.required}")
     private PropertyType type;
