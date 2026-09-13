@@ -3,14 +3,24 @@ package com.rentalhub.domain.repository;
 import com.rentalhub.domain.model.Property;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface PropertyRepository extends JpaRepository<Property, Long>, JpaSpecificationExecutor<Property> {
+
+    /**
+     * One listing together with its host and images, in a single query. An entity
+     * graph says "fetch these associations now", which the detail view needs because
+     * nothing can be lazy-loaded once the repository's transaction has closed.
+     */
+    @EntityGraph(attributePaths = {"host", "images"})
+    Optional<Property> findWithDetailsById(Long id);
 
     List<Property> findByHostId(Long hostId);
 

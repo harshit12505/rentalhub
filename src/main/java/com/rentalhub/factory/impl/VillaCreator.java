@@ -2,7 +2,7 @@ package com.rentalhub.factory.impl;
 
 import com.rentalhub.domain.model.Villa;
 import com.rentalhub.domain.model.enums.PropertyType;
-import com.rentalhub.dto.CreatePropertyRequest;
+import com.rentalhub.dto.PropertyRequest;
 import com.rentalhub.exception.PropertyValidationException;
 import com.rentalhub.factory.AbstractPropertyCreator;
 import com.rentalhub.factory.AttributeKind;
@@ -28,7 +28,7 @@ public class VillaCreator extends AbstractPropertyCreator<Villa> {
             AttributeSpec.optional(POOL, AttributeKind.BOOLEAN));
 
     public VillaCreator() {
-        super(Villa.class);
+        super(Villa.class, Villa::new);
     }
 
     @Override
@@ -42,7 +42,7 @@ public class VillaCreator extends AbstractPropertyCreator<Villa> {
     }
 
     @Override
-    protected void validateSpecific(CreatePropertyRequest request, TypeAttributes attributes) {
+    protected void validateSpecific(PropertyRequest request, TypeAttributes attributes) {
         if (attributes.decimal(PLOT_AREA).compareTo(MIN_PLOT_AREA_SQM) < 0) {
             throw PropertyValidationException.onField(
                     AttributeSpec.fieldPathOf(PLOT_AREA), "property.villa.plotArea.min", MIN_PLOT_AREA_SQM);
@@ -57,10 +57,8 @@ public class VillaCreator extends AbstractPropertyCreator<Villa> {
     }
 
     @Override
-    protected Villa build(TypeAttributes attributes) {
-        Villa villa = new Villa();
+    protected void applyTypeFields(Villa villa, TypeAttributes attributes) {
         villa.setPlotAreaSqm(attributes.decimal(PLOT_AREA));
         villa.setHasPool(attributes.bool(POOL));
-        return villa;
     }
 }

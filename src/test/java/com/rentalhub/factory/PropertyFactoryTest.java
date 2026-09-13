@@ -5,7 +5,7 @@ import com.rentalhub.domain.model.Cabin;
 import com.rentalhub.domain.model.Property;
 import com.rentalhub.domain.model.User;
 import com.rentalhub.domain.model.enums.PropertyType;
-import com.rentalhub.dto.CreatePropertyRequest;
+import com.rentalhub.dto.PropertyRequest;
 import com.rentalhub.exception.PropertyValidationException;
 import com.rentalhub.factory.impl.ApartmentCreator;
 import com.rentalhub.factory.impl.VillaCreator;
@@ -102,7 +102,7 @@ class PropertyFactoryTest {
     @DisplayName("the test fixtures cover every property type")
     void fixturesCoverEveryType() {
         assertThat(TestRequests.oneValidPerType())
-                .extracting(CreatePropertyRequest::getType)
+                .extracting(PropertyRequest::getType)
                 .containsExactlyInAnyOrder(PropertyType.values());
     }
 
@@ -111,7 +111,7 @@ class PropertyFactoryTest {
     @Test
     @DisplayName("every valid request builds its own subtype")
     void everyValidRequestBuilds() {
-        for (CreatePropertyRequest request : TestRequests.oneValidPerType()) {
+        for (PropertyRequest request : TestRequests.oneValidPerType()) {
             Property property = factory.create(request, host);
 
             assertThat(property.getType()).isEqualTo(request.getType());
@@ -141,7 +141,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("a missing type is rejected")
         void missingType() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.setType(null);
 
             assertRejected(request, "property.type.required", "type");
@@ -150,7 +150,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("a zero price is rejected for every type")
         void zeroPriceForEveryType() {
-            for (CreatePropertyRequest request : TestRequests.oneValidPerType()) {
+            for (PropertyRequest request : TestRequests.oneValidPerType()) {
                 request.setPricePerNight(BigDecimal.ZERO);
 
                 assertRejected(request, "property.price.positive", "pricePerNight");
@@ -160,7 +160,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("a price with more decimals than the currency uses is rejected")
         void tooManyDecimals() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.setPricePerNight(new BigDecimal("2500.125"));
 
             assertRejected(request, "property.price.precision", "pricePerNight");
@@ -169,7 +169,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("trailing zeros do not count as extra decimals")
         void trailingZerosAreFine() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.setPricePerNight(new BigDecimal("2500.0000"));
 
             assertThat(factory.create(request, host).getPricePerNight()).isEqualByComparingTo("2500");
@@ -178,7 +178,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("a missing currency is rejected")
         void missingCurrency() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.setCurrency(null);
 
             assertRejected(request, "property.currency.required", "currency");
@@ -187,7 +187,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("a listing must sleep at least one guest")
         void zeroGuests() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.setMaxGuests(0);
 
             assertRejected(request, "property.guests.min", "maxGuests");
@@ -196,7 +196,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("negative bathrooms are rejected")
         void negativeBathrooms() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.setBathrooms(-1);
 
             assertRejected(request, "property.bathrooms.negative", "bathrooms");
@@ -205,7 +205,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("shared rules run before type-specific ones")
         void templateMethodOrder() {
-            CreatePropertyRequest request = TestRequests.validVilla();
+            PropertyRequest request = TestRequests.validVilla();
             request.setPricePerNight(BigDecimal.ZERO);
             request.getAttributes().remove("plotAreaSqm");
 
@@ -222,7 +222,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("a missing required attribute is reported by its label")
         void missingRequired() {
-            CreatePropertyRequest request = TestRequests.validVilla();
+            PropertyRequest request = TestRequests.validVilla();
             request.getAttributes().remove("plotAreaSqm");
 
             PropertyValidationException ex = assertRejected(
@@ -233,7 +233,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("a value that is not a number is rejected")
         void unreadableNumber() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.getAttributes().put("floorNumber", "third");
 
             assertRejected(request, "property.attribute.format", "attributes[floorNumber]");
@@ -242,7 +242,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("a value outside a choice list is rejected")
         void unknownChoice() {
-            CreatePropertyRequest request = TestRequests.validCabin();
+            PropertyRequest request = TestRequests.validCabin();
             request.getAttributes().put("heatingType", "MAGIC");
 
             assertRejected(request, "property.attribute.choice", "attributes[heatingType]");
@@ -251,7 +251,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("an attribute that belongs to another type is rejected")
         void attributeFromAnotherType() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.getAttributes().put("plotAreaSqm", "300");
 
             assertRejected(request, "property.attribute.unknown", "attributes[plotAreaSqm]");
@@ -260,7 +260,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("blank values count as not supplied, as HTML forms send them")
         void blanksIgnored() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.getAttributes().put("plotAreaSqm", "");
             request.getAttributes().put("hasElevator", "  ");
 
@@ -277,7 +277,7 @@ class PropertyFactoryTest {
                 // In Turkish, upper-case "i" is "İ" (dotted), so a locale-sensitive
                 // toUpperCase() would turn "electric" into "ELECTRİC" and reject it.
                 Locale.setDefault(Locale.forLanguageTag("tr-TR"));
-                CreatePropertyRequest request = TestRequests.validCabin();
+                PropertyRequest request = TestRequests.validCabin();
                 request.getAttributes().put("heatingType", "electric");
 
                 Cabin cabin = (Cabin) factory.create(request, host);
@@ -298,7 +298,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("floor number cannot be negative")
         void negativeFloor() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.getAttributes().put("floorNumber", "-1");
 
             assertRejected(request, "property.apartment.floor.negative", "attributes[floorNumber]");
@@ -307,7 +307,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("above floor 4 the host must say whether there is a lift")
         void highFloorNeedsLiftAnswer() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.getAttributes().put("floorNumber", "7");
 
             PropertyValidationException ex = assertRejected(
@@ -318,7 +318,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("an explicit 'no lift' is an answer, and is stored")
         void highFloorExplicitNoLift() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.getAttributes().put("floorNumber", "7");
             request.getAttributes().put("hasElevator", "false");
 
@@ -330,7 +330,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("up to floor 4 the lift may be left unstated")
         void lowFloorMayOmitLift() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.getAttributes().put("floorNumber", "4");
 
             assertThat(((Apartment) factory.create(request, host)).getHasElevator()).isNull();
@@ -339,7 +339,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("an apartment needs at least one bedroom")
         void noBedrooms() {
-            CreatePropertyRequest request = TestRequests.validApartment();
+            PropertyRequest request = TestRequests.validApartment();
             request.setBedrooms(0);
 
             assertRejected(request, "property.apartment.bedrooms.min", "bedrooms");
@@ -353,7 +353,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("plot area must be at least 100 m²")
         void smallPlot() {
-            CreatePropertyRequest request = TestRequests.validVilla();
+            PropertyRequest request = TestRequests.validVilla();
             request.getAttributes().put("plotAreaSqm", "99.99");
 
             assertRejected(request, "property.villa.plotArea.min", "attributes[plotAreaSqm]");
@@ -362,7 +362,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("exactly 100 m² is accepted")
         void boundaryPlot() {
-            CreatePropertyRequest request = TestRequests.validVilla();
+            PropertyRequest request = TestRequests.validVilla();
             request.getAttributes().put("plotAreaSqm", "100");
 
             assertThat(factory.create(request, host).getType()).isEqualTo(PropertyType.VILLA);
@@ -371,9 +371,9 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("two guests is fine for an apartment but not for a villa")
         void smallCapacity() {
-            CreatePropertyRequest villa = TestRequests.validVilla();
+            PropertyRequest villa = TestRequests.validVilla();
             villa.setMaxGuests(2);
-            CreatePropertyRequest apartment = TestRequests.validApartment();
+            PropertyRequest apartment = TestRequests.validApartment();
             apartment.setMaxGuests(2);
 
             assertRejected(villa, "property.villa.guests.min", "maxGuests");
@@ -383,7 +383,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("a villa needs at least two bedrooms")
         void oneBedroom() {
-            CreatePropertyRequest request = TestRequests.validVilla();
+            PropertyRequest request = TestRequests.validVilla();
             request.setBedrooms(1);
 
             assertRejected(request, "property.villa.bedrooms.min", "bedrooms");
@@ -397,7 +397,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("heating type is required")
         void heatingRequired() {
-            CreatePropertyRequest request = TestRequests.validCabin();
+            PropertyRequest request = TestRequests.validCabin();
             request.getAttributes().remove("heatingType");
 
             assertRejected(request, "property.attribute.required", "attributes[heatingType]");
@@ -407,12 +407,12 @@ class PropertyFactoryTest {
         @DisplayName("distance to town must be within 0–200 km, inclusive")
         void distanceBounds() {
             for (String accepted : List.of("0", "200")) {
-                CreatePropertyRequest request = TestRequests.validCabin();
+                PropertyRequest request = TestRequests.validCabin();
                 request.getAttributes().put("distanceToTownKm", accepted);
                 assertThat(factory.create(request, host).getType()).isEqualTo(PropertyType.CABIN);
             }
             for (String rejected : List.of("-0.5", "200.01")) {
-                CreatePropertyRequest request = TestRequests.validCabin();
+                PropertyRequest request = TestRequests.validCabin();
                 request.getAttributes().put("distanceToTownKm", rejected);
                 assertRejected(request, "property.cabin.distance.range", "attributes[distanceToTownKm]");
             }
@@ -426,7 +426,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("a studio sleeps at most three")
         void tooManyGuests() {
-            CreatePropertyRequest request = TestRequests.validStudio();
+            PropertyRequest request = TestRequests.validStudio();
             request.setMaxGuests(4);
 
             assertRejected(request, "property.studio.guests.max", "maxGuests");
@@ -435,7 +435,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("a studio must be at least 12 m²")
         void tooSmall() {
-            CreatePropertyRequest request = TestRequests.validStudio();
+            PropertyRequest request = TestRequests.validStudio();
             request.getAttributes().put("areaSqm", "11.99");
 
             assertRejected(request, "property.studio.area.min", "attributes[areaSqm]");
@@ -444,7 +444,7 @@ class PropertyFactoryTest {
         @Test
         @DisplayName("bedrooms are forced to zero without changing the caller's request")
         void bedroomsForcedToZero() {
-            CreatePropertyRequest request = TestRequests.validStudio();
+            PropertyRequest request = TestRequests.validStudio();
             request.setBedrooms(2);
 
             Property studio = factory.create(request, host);
@@ -454,13 +454,77 @@ class PropertyFactoryTest {
         }
     }
 
+    // ----------------------------------------------------------------- updates
+
+    @Nested
+    @DisplayName("updates")
+    class Updates {
+
+        @Test
+        @DisplayName("an update runs the same type rules as creation")
+        void updateEnforcesTypeRules() {
+            Property villa = factory.create(TestRequests.validVilla(), host);
+            PropertyRequest shrunk = TestRequests.validVilla();
+            shrunk.setMaxGuests(2);
+
+            Throwable thrown = catchThrowable(() -> factory.update(villa, shrunk));
+
+            assertThat(thrown).isInstanceOf(PropertyValidationException.class);
+            assertThat(((PropertyValidationException) thrown).getMessageKey()).isEqualTo("property.villa.guests.min");
+            assertThat(villa.getMaxGuests()).as("a rejected update changes nothing").isEqualTo(6);
+        }
+
+        @Test
+        @DisplayName("an update replaces the fields but keeps host and active status")
+        void updateReplacesFields() {
+            Property villa = factory.create(TestRequests.validVilla(), host);
+            villa.setActive(false);
+            PropertyRequest change = TestRequests.validVilla();
+            change.setTitle("  Renamed villa ");
+            change.getAttributes().remove("hasPool");
+
+            factory.update(villa, change);
+
+            assertThat(villa.getTitle()).isEqualTo("Renamed villa");
+            assertThat(villa.getHost()).isSameAs(host);
+            assertThat(villa.isActive()).isFalse();
+            assertThat(villa.typeAttributes()).as("PUT replaces: an omitted optional becomes 'not stated'")
+                    .containsEntry("hasPool", null);
+        }
+
+        @Test
+        @DisplayName("the type of an existing listing cannot change")
+        void typeCannotChange() {
+            Property villa = factory.create(TestRequests.validVilla(), host);
+
+            Throwable thrown = catchThrowable(() -> factory.update(villa, TestRequests.validStudio()));
+
+            assertThat(thrown).isInstanceOf(PropertyValidationException.class);
+            PropertyValidationException ex = (PropertyValidationException) thrown;
+            assertThat(ex.getMessageKey()).isEqualTo("property.type.cannotChange");
+            assertThat(ex.getField()).isEqualTo("type");
+        }
+
+        @Test
+        @DisplayName("invariants hold on update too: a studio keeps zero bedrooms")
+        void studioInvariantOnUpdate() {
+            Property studio = factory.create(TestRequests.validStudio(), host);
+            PropertyRequest change = TestRequests.validStudio();
+            change.setBedrooms(2);
+
+            factory.update(studio, change);
+
+            assertThat(studio.getBedrooms()).isZero();
+        }
+    }
+
     // ----------------------------------------------------------------- helper
 
     /**
      * Asserts the factory rejects the request with this key and field, and that the
      * key exists in messages.properties with every argument filled in.
      */
-    private PropertyValidationException assertRejected(CreatePropertyRequest request,
+    private PropertyValidationException assertRejected(PropertyRequest request,
                                                        String expectedKey,
                                                        String expectedField) {
         Throwable thrown = catchThrowable(() -> factory.create(request, host));

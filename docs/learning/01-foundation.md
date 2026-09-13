@@ -290,7 +290,7 @@ whole number, not as four decimals.
 
 ## 8. The Factory, the Template Method, and data-driven attributes
 
-📄 `factory/*.java`, `factory/impl/*.java`, `dto/CreatePropertyRequest.java`
+📄 `factory/*.java`, `factory/impl/*.java`, `dto/PropertyRequest.java`
 
 ### The problem
 
@@ -302,7 +302,7 @@ when a type is added. Miss one and you have a bug.
 
 ```mermaid
 flowchart LR
-    R[CreatePropertyRequest<br/>type = VILLA] --> F[PropertyFactory]
+    R[PropertyRequest<br/>type = VILLA] --> F[PropertyFactory]
     F -->|EnumMap lookup| C[VillaCreator]
     C --> V[Villa entity]
 ```
@@ -330,6 +330,11 @@ create(request, host)                      ← final: the template
  ├─ applyCommonFields(...)                 ← shared: title, city, price…
  └─ enforceInvariants(property)            ← hook: e.g. studio bedrooms = 0
 ```
+
+> **Changed in Phase 2:** to support updates, the type-specific step became
+> `applyTypeFields(entity, attributes)` ("fill in this entity, new or existing") instead
+> of `build(attributes)` ("make a new one"), and `create`/`update` share the same
+> validation. See [02 — Caching §9](02-caching.md#9-updates-reuse-the-factorys-rules).
 
 The rules really differ per type: an apartment above floor 4 must state whether there's a
 lift; a villa needs a plot of 100 m² or more, sleeps at least 4 and has 2+ bedrooms; a

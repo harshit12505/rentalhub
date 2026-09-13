@@ -8,6 +8,7 @@ interview. One doc per phase, written as each phase is built.
 | [📒 Project log & study plan](project-log.md) | **Start here.** Everything done so far, every decision and problem, your to-do list, and the full YouTube study plan with tick-boxes |
 | [00 — Stack choices](00-stack-choices.md) | Why each technology, what the alternatives were, and what to say when asked |
 | [01 — Foundation](01-foundation.md) | Maven, Spring Boot, JPA/Hibernate, Flyway, the schema, the double-booking constraint, BigDecimal, the Factory + Template Method patterns, i18n keys, testing |
+| [02 — Caching](02-caching.md) | Cache-aside, Caffeine + Redis tiers, W-TinyLFU, cache stampedes, search keys and partitions, after-commit invalidation, SCAN vs KEYS, deferred vs immediate removal, Redis outages, the REST API, N+1 |
 
 ## How to use them
 
@@ -39,3 +40,12 @@ interview. One doc per phase, written as each phase is built.
 | **Testcontainers** | A library that starts real services (Postgres, Redis) in Docker for the duration of a test run. |
 | **i18n** | "Internationalisation" (18 letters between i and n): making the app able to speak several languages. |
 | **DTO** | Data Transfer Object: a plain class that carries data between layers or over the network, with no database behaviour attached. |
+| **Cache** | A copy of an answer kept somewhere faster than its source. A **hit** means the cache had it; a **miss** means it didn't. |
+| **TTL** | Time to live: how long a cache entry may exist before it deletes itself. |
+| **Invalidation** | Removing a cached entry because the data behind it changed. |
+| **Cache-aside** | The app checks the cache, reads the database on a miss and stores the result, and removes cached copies when data changes. |
+| **Cache stampede** | Many requests missing the same cache entry at once and all hitting the database together. |
+| **Redis** | An in-memory key–value server, used here as a shared cache. |
+| **Pub/sub** | Publish/subscribe messaging: a message sent to a channel reaches everyone listening at that moment. |
+| **Event listener** | Code that runs when something announces an event; `@TransactionalEventListener` can wait until the transaction commits. |
+| **HTTP status codes** | 200 OK, 201 Created, 204 No Content, 400 bad request, 403 not allowed, 404 not found, 409 conflict with the current state. |

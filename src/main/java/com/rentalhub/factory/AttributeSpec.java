@@ -13,7 +13,7 @@ import java.util.Objects;
  * without knowing which property type they are looking at. That is what lets a new
  * property type appear everywhere without any view or API code changing.
  *
- * @param name     key in {@code CreatePropertyRequest.attributes} and in {@code Property.typeAttributes()}
+ * @param name     key in {@code PropertyRequest.attributes} and in {@code Property.typeAttributes()}
  * @param kind     how the raw text is parsed
  * @param required whether a request must supply a value
  * @param choices  allowed upper-case codes for {@link AttributeKind#CHOICE}; empty for every other kind
