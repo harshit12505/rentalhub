@@ -1,0 +1,13 @@
+{
+  "type": "STUDIO",
+  "title": "Compact city studio",
+  "description": "One room with a kitchenette, close to the metro.",
+  "city": "Bengaluru",
+  "country": "India",
+  "pricePerNight": 1800,
+  "currency": "INR",
+  "maxGuests": 2,
+  "bedrooms": 0,
+  "bathrooms": 1,
+  "attributes": { "areaSqm": "28", "hasSofaBed": "true" }
+}

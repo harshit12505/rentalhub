@@ -1,0 +1,13 @@
+{
+  "type": "APARTMENT",
+  "title": "Marina view apartment",
+  "description": "Bright one-bedroom flat near the beach road.",
+  "city": "Chennai",
+  "country": "India",
+  "pricePerNight": 2500,
+  "currency": "INR",
+  "maxGuests": 2,
+  "bedrooms": 1,
+  "bathrooms": 1,
+  "attributes": { "floorNumber": "3" }
+}

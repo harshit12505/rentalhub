@@ -39,15 +39,11 @@ when Redis is down.
 ## 2. Your to-do list
 
 ### Before Phase 3 (recommended)
-- [ ] Start **Docker Desktop**, then `docker compose up -d` (Postgres **and** Redis).
-- [ ] Run the tests: `.\mvnw.cmd test` → expect `Tests run: 86, Failures: 0`.
-- [ ] Run the app on port 8081 (`$env:PORT = "8081"`, then `.\mvnw.cmd spring-boot:run`)
-      and follow **"Trying the API"** in the README: create a host, create a villa, read
-      it twice, search.
-- [ ] Watch the cache: run `docker exec -it rentalhub-redis redis-cli MONITOR` in a second
-      window while you call the API.
-- [ ] Stop Redis (`docker stop rentalhub-redis`), call the API, see it still works, then
-      `docker start rentalhub-redis`.
+- [ ] Work through the **[hands-on guide](hands-on-guide.md)**, Parts 0–18 (about 45
+      minutes). It covers everything in Phases 1 and 2: the tests, the database rules, every
+      API call and error, watching the cache live in Redis, a Redis outage, and seeing a
+      cache hit skip your code in the IntelliJ debugger. Every step lists the expected
+      result.
 
 ### Reading
 - [ ] [02 — Caching](02-caching.md), and answer its interview questions out loud

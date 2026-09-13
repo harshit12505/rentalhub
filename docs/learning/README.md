@@ -6,6 +6,7 @@ interview. One doc per phase, written as each phase is built.
 | Doc | Covers |
 |---|---|
 | [📒 Project log & study plan](project-log.md) | **Start here.** Everything done so far, every decision and problem, your to-do list, and the full YouTube study plan with tick-boxes |
+| [🧪 Hands-on guide](hands-on-guide.md) | Test every feature yourself: exact PowerShell commands and the expected result for each |
 | [00 — Stack choices](00-stack-choices.md) | Why each technology, what the alternatives were, and what to say when asked |
 | [01 — Foundation](01-foundation.md) | Maven, Spring Boot, JPA/Hibernate, Flyway, the schema, the double-booking constraint, BigDecimal, the Factory + Template Method patterns, i18n keys, testing |
 | [02 — Caching](02-caching.md) | Cache-aside, Caffeine + Redis tiers, W-TinyLFU, cache stampedes, search keys and partitions, after-commit invalidation, SCAN vs KEYS, deferred vs immediate removal, Redis outages, the REST API, N+1 |

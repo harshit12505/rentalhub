@@ -121,8 +121,12 @@ One phase at a time, in order. Never scaffold a later phase early. After each ph
    (add to the register), problems hit and fixes, the owner's to-do list, status table
    and commit hash; keep its YouTube study plan complete (clickable YouTube *search*
    links, never invented video URLs);
-5. commit `Phase N: <descriptive summary>` (message from a file: `git commit -F <file>`);
-6. STOP and wait for the owner's confirmation.
+5. extend `docs/learning/hands-on-guide.md` with the phase's manual checks (exact
+   PowerShell commands + expected output), and add request bodies to `samples/api/`.
+   Run every step first against throwaway containers (different names/ports, `--rm`;
+   never touch the owner's `rentalhub-*` containers) and write down the real output;
+6. commit `Phase N: <descriptive summary>` (message from a file: `git commit -F <file>`);
+7. STOP and wait for the owner's confirmation.
 
 ## Phases
 | # | Phase | Status |
