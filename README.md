@@ -91,6 +91,11 @@ docker compose up -d
 
 ## Trying the API (PowerShell)
 
+> **Want to test everything yourself, step by step?** Follow
+> [`docs/learning/hands-on-guide.md`](docs/learning/hands-on-guide.md): every feature, with
+> the exact command and the expected result. Ready-made request bodies are in
+> [`samples/api/`](samples/api/README.md).
+
 | Method | Path | Who | What |
 |---|---|---|---|
 | `GET` | `/api/properties/{id}` | anyone | One listing. Cached: Caffeine → Redis → database |

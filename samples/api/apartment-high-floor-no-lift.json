@@ -1,0 +1,13 @@
+{
+  "type": "APARTMENT",
+  "title": "Seventh floor flat",
+  "description": "Seventh floor, but the host has not said whether there is a lift.",
+  "city": "Chennai",
+  "country": "India",
+  "pricePerNight": 3000,
+  "currency": "INR",
+  "maxGuests": 2,
+  "bedrooms": 1,
+  "bathrooms": 1,
+  "attributes": { "floorNumber": "7" }
+}

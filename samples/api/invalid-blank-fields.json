@@ -1,0 +1,13 @@
+{
+  "type": "VILLA",
+  "title": "",
+  "description": "Title and city are blank, so bean validation rejects this before any rule runs.",
+  "city": " ",
+  "country": "India",
+  "pricePerNight": 12000,
+  "currency": "INR",
+  "maxGuests": 8,
+  "bedrooms": 4,
+  "bathrooms": 3,
+  "attributes": { "plotAreaSqm": "450" }
+}

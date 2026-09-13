@@ -1,0 +1,13 @@
+{
+  "type": "APARTMENT",
+  "title": "Oddly priced flat",
+  "description": "Rupees have two decimal places, so this price is impossible.",
+  "city": "Chennai",
+  "country": "India",
+  "pricePerNight": 2500.125,
+  "currency": "INR",
+  "maxGuests": 2,
+  "bedrooms": 1,
+  "bathrooms": 1,
+  "attributes": { "floorNumber": "3" }
+}

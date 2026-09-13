@@ -1,0 +1,13 @@
+{
+  "type": "VILLA",
+  "title": "Tiny villa",
+  "description": "A villa for two, which the villa rules do not allow.",
+  "city": "Goa",
+  "country": "India",
+  "pricePerNight": 9000,
+  "currency": "INR",
+  "maxGuests": 2,
+  "bedrooms": 2,
+  "bathrooms": 1,
+  "attributes": { "plotAreaSqm": "300" }
+}

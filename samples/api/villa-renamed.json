@@ -1,0 +1,13 @@
+{
+  "type": "VILLA",
+  "title": "Sunset villa",
+  "description": "Four bedrooms, two minutes from the beach.",
+  "city": "Goa",
+  "country": "India",
+  "pricePerNight": 12000,
+  "currency": "INR",
+  "maxGuests": 8,
+  "bedrooms": 4,
+  "bathrooms": 3,
+  "attributes": { "plotAreaSqm": "450", "hasPool": "true" }
+}
