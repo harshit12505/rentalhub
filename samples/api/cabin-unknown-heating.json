@@ -1,0 +1,13 @@
+{
+  "type": "CABIN",
+  "title": "Magic cabin",
+  "description": "Heated by magic, which is not on the list of known heating types.",
+  "city": "Manali",
+  "country": "India",
+  "pricePerNight": 4000,
+  "currency": "INR",
+  "maxGuests": 4,
+  "bedrooms": 2,
+  "bathrooms": 1,
+  "attributes": { "heatingType": "magic", "distanceToTownKm": "14.5" }
+}

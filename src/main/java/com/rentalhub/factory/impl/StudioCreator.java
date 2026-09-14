@@ -2,7 +2,7 @@ package com.rentalhub.factory.impl;
 
 import com.rentalhub.domain.model.Studio;
 import com.rentalhub.domain.model.enums.PropertyType;
-import com.rentalhub.dto.CreatePropertyRequest;
+import com.rentalhub.dto.PropertyRequest;
 import com.rentalhub.exception.PropertyValidationException;
 import com.rentalhub.factory.AbstractPropertyCreator;
 import com.rentalhub.factory.AttributeKind;
@@ -27,7 +27,7 @@ public class StudioCreator extends AbstractPropertyCreator<Studio> {
             AttributeSpec.optional(SOFA_BED, AttributeKind.BOOLEAN));
 
     public StudioCreator() {
-        super(Studio.class);
+        super(Studio.class, Studio::new);
     }
 
     @Override
@@ -41,7 +41,7 @@ public class StudioCreator extends AbstractPropertyCreator<Studio> {
     }
 
     @Override
-    protected void validateSpecific(CreatePropertyRequest request, TypeAttributes attributes) {
+    protected void validateSpecific(PropertyRequest request, TypeAttributes attributes) {
         // A studio is one room by definition, so capacity is capped. Anything
         // larger belongs in another category.
         if (request.getMaxGuests() > MAX_GUESTS) {
@@ -54,11 +54,9 @@ public class StudioCreator extends AbstractPropertyCreator<Studio> {
     }
 
     @Override
-    protected Studio build(TypeAttributes attributes) {
-        Studio studio = new Studio();
+    protected void applyTypeFields(Studio studio, TypeAttributes attributes) {
         studio.setAreaSqm(attributes.decimal(AREA));
         studio.setHasSofaBed(attributes.bool(SOFA_BED));
-        return studio;
     }
 
     /** One room means zero bedrooms, whatever the request said. Enforced, not trusted. */

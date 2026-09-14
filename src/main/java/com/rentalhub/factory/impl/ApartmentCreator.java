@@ -2,7 +2,7 @@ package com.rentalhub.factory.impl;
 
 import com.rentalhub.domain.model.Apartment;
 import com.rentalhub.domain.model.enums.PropertyType;
-import com.rentalhub.dto.CreatePropertyRequest;
+import com.rentalhub.dto.PropertyRequest;
 import com.rentalhub.exception.PropertyValidationException;
 import com.rentalhub.factory.AbstractPropertyCreator;
 import com.rentalhub.factory.AttributeKind;
@@ -26,7 +26,7 @@ public class ApartmentCreator extends AbstractPropertyCreator<Apartment> {
             AttributeSpec.optional(ELEVATOR, AttributeKind.BOOLEAN));
 
     public ApartmentCreator() {
-        super(Apartment.class);
+        super(Apartment.class, Apartment::new);
     }
 
     @Override
@@ -40,7 +40,7 @@ public class ApartmentCreator extends AbstractPropertyCreator<Apartment> {
     }
 
     @Override
-    protected void validateSpecific(CreatePropertyRequest request, TypeAttributes attributes) {
+    protected void validateSpecific(PropertyRequest request, TypeAttributes attributes) {
         int floor = attributes.integer(FLOOR);
         if (floor < 0) {
             throw PropertyValidationException.onField(
@@ -57,11 +57,9 @@ public class ApartmentCreator extends AbstractPropertyCreator<Apartment> {
     }
 
     @Override
-    protected Apartment build(TypeAttributes attributes) {
-        Apartment apartment = new Apartment();
+    protected void applyTypeFields(Apartment apartment, TypeAttributes attributes) {
         apartment.setFloorNumber(attributes.integer(FLOOR));
         // Stored as given: null means "not stated", which is allowed up to floor 4.
         apartment.setHasElevator(attributes.bool(ELEVATOR));
-        return apartment;
     }
 }

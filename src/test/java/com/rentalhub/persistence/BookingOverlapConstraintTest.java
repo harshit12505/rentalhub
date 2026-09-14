@@ -4,16 +4,13 @@ import com.rentalhub.domain.model.User;
 import com.rentalhub.domain.repository.PropertyRepository;
 import com.rentalhub.domain.repository.UserRepository;
 import com.rentalhub.factory.PropertyFactory;
+import com.rentalhub.support.IntegrationTest;
 import com.rentalhub.support.TestRequests;
-import com.rentalhub.support.TestcontainersConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.SQLException;
@@ -28,17 +25,12 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * locking and a two-thread race test on top; this constraint is the backstop that
  * holds even if that code has a bug or someone writes to the table directly.
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration.class)
 @Transactional
-class BookingOverlapConstraintTest {
+class BookingOverlapConstraintTest extends IntegrationTest {
 
     /** PostgreSQL error codes: https://www.postgresql.org/docs/16/errcodes-appendix.html */
     private static final String EXCLUSION_VIOLATION = "23P01";
     private static final String CHECK_VIOLATION = "23514";
-
-    @Autowired
-    private JdbcTemplate jdbc;
 
     @Autowired
     private PropertyFactory factory;

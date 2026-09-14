@@ -1,0 +1,13 @@
+{
+  "type": "VILLA",
+  "title": "Sunset villa",
+  "description": "Four bedrooms, now by the sea in Mumbai.",
+  "city": "Mumbai",
+  "country": "India",
+  "pricePerNight": 15000,
+  "currency": "INR",
+  "maxGuests": 8,
+  "bedrooms": 4,
+  "bathrooms": 3,
+  "attributes": { "plotAreaSqm": "450", "hasPool": "true" }
+}

@@ -24,7 +24,11 @@ embeddings `gemini-embedding-001` at 768 dims, normalised · Hibernate Envers ·
 test mode · AWS S3 · REST + Spring GraphQL · springdoc-openapi · Lombok.
 
 Resolved versions worth knowing: Hibernate 7.4, Flyway 12.4, Testcontainers 2.0
-(`org.testcontainers.postgresql.PostgreSQLContainer`, artifact `testcontainers-postgresql`).
+(`org.testcontainers.postgresql.PostgreSQLContainer`, artifact `testcontainers-postgresql`),
+Spring Data Redis 4.1 on Lettuce 7.5, Caffeine 3.2, Jackson 3.1 (Redis JSON via
+`JacksonJsonRedisSerializer`). MockMvc: `@AutoConfigureMockMvc` is in
+`org.springframework.boot.webmvc.test.autoconfigure` (test starter `spring-boot-starter-webmvc-test`).
+With Lettuce, Spring Data Redis cache writes/clears are asynchronous unless `immediateWrites()`.
 Boot 4 specifics: `spring-boot-starter-webmvc` (not `-web`), `spring-boot-starter-flyway`
 is required, Jackson 3 (`tools.jackson`), Spring Retry is NOT managed — use Spring
 Framework 7's built-in `@Retryable` (`org.springframework.resilience.annotation`).
@@ -38,7 +42,7 @@ Framework 7's built-in `@Retryable` (`org.springframework.resilience.annotation`
 - No `if`/`switch` on property type anywhere. Type dispatch goes through `PropertyFactory`
   (EnumMap of `PropertyCreator` beans; fails at startup if a type has no creator).
   Type-specific fields are declared by each creator as `AttributeSpec`s, travel in
-  `CreatePropertyRequest.attributes`, and are exposed by `Property.typeAttributes()`,
+  `PropertyRequest.attributes`, and are exposed by `Property.typeAttributes()`,
   so forms/views/GraphQL render them generically.
 - Adding a property type = enum value + entity + creator + migration + translated
   labels. Nothing else. `PropertyFactoryTest` enforces entity/creator/label agreement.
@@ -60,17 +64,29 @@ Framework 7's built-in `@Retryable` (`org.springframework.resilience.annotation`
 - Entities: `@Getter`/`@Setter` only (no setters on id/version/timestamps). Never
   `@Data`, `@EqualsAndHashCode` or `@ToString`.
 - `open-in-view: false`. Services load everything a view needs.
-- Caches hold DTOs, never managed entities.
+- Caches hold immutable DTO records, never managed entities (Caffeine hands the same
+  instance to every caller). Changing a cached record's shape → bump
+  `rentalhub.cache.key-prefix` (`rentalhub:v1:` → `v2`).
+- Every listing write goes through `PropertyService`, which publishes `PropertyChangedEvent`;
+  `PropertyCacheInvalidator` evicts after commit. Production code never changes listings
+  via the repository directly (tests may, to bypass the caches on purpose).
+- Removal after a change uses the *immediate* cache methods (`evictIfPresent`, `invalidate`,
+  the Redis writer's `invalidate`), never `evict`/`clear`, which may be deferred.
+- REST: the acting user is the `X-Demo-User-Id` header until phase 8's session switcher.
+  Controllers are thin; rules live in services.
 - Retry wraps the transaction from the outside: each attempt is a fresh transaction.
 - No external calls (Stripe, S3, Gemini, FX API) inside a DB transaction.
 - No secrets in the repo: `${ENV_VAR:local-default}` in YAML; `.env` is git-ignored.
   Database env vars: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`.
+  Redis: `REDIS_URL` (default `redis://localhost:6379`).
   `spring.profiles.default: local`; Render sets `SPRING_PROFILES_ACTIVE=render`.
 - Case conversion of identifiers uses `Locale.ROOT`.
 - Javadoc explains *why*, not what.
-- Tests: plain unit tests where possible; anything touching SQL uses Testcontainers
-  (`pgvector/pgvector:pg16`, via `support/TestcontainersConfiguration`), never H2.
-  DB tests are `@Transactional` so they roll back.
+- Tests: plain unit tests where possible. Anything touching SQL or Redis extends
+  `support/IntegrationTest`: one shared context with Postgres (`pgvector/pgvector:pg16`)
+  and Redis containers, `@AutoConfigureMockMvc`; after each test it truncates tables and
+  invalidates caches. Never H2. Tests of after-commit behaviour, and API tests, must NOT be
+  `@Transactional` (a test-wide transaction hides lazy-loading bugs and never commits).
 
 ## Package layout (base `com.rentalhub`)
 ```
@@ -82,6 +98,8 @@ domain/model/  Property (abstract, SINGLE_TABLE) + Apartment/Villa/Cabin/Studio,
 domain/repository/  Spring Data JPA interfaces
 factory/       PropertyCreator, AbstractPropertyCreator (template method), PropertyFactory,
                AttributeSpec, AttributeKind, TypeAttributes; impl/ one creator per type
+cache/         TwoLevelCache, PropertyCacheInvalidator, SearchCacheKeys(+KeyGenerator),
+               CacheNames, CacheSettings (wired in config/CacheConfig)
 service/       PropertyService, SearchService, BookingService, ReviewService,
                PaymentService, CurrencyService, ImageStorageService, DemoUserService
 ai/            AiAvailability, ListingEmbeddingService, PreferenceProfileService,
@@ -103,14 +121,18 @@ One phase at a time, in order. Never scaffold a later phase early. After each ph
    (add to the register), problems hit and fixes, the owner's to-do list, status table
    and commit hash; keep its YouTube study plan complete (clickable YouTube *search*
    links, never invented video URLs);
-5. commit `Phase N: <descriptive summary>` (message from a file: `git commit -F <file>`);
-6. STOP and wait for the owner's confirmation.
+5. extend `docs/learning/hands-on-guide.md` with the phase's manual checks (exact
+   PowerShell commands + expected output), and add request bodies to `samples/api/`.
+   Run every step first against throwaway containers (different names/ports, `--rm`;
+   never touch the owner's `rentalhub-*` containers) and write down the real output;
+6. commit `Phase N: <descriptive summary>` (message from a file: `git commit -F <file>`);
+7. STOP and wait for the owner's confirmation.
 
 ## Phases
 | # | Phase | Status |
 |---|-------|--------|
 | 1 | Foundation: pom, wrapper, compose, config, V1 schema, domain, factory, tests | done |
-| 2 | Caching: Caffeine + Redis two-tier, invalidation | — |
+| 2 | Caching: Caffeine + Redis two-tier, invalidation (+ listings REST API) | done |
 | 3 | Bookings: transactions, optimistic locking, retry, concurrency test | — |
 | 4 | Auditing & scheduling: Envers, structured logs, @Scheduled job | — |
 | 5 | Payments: Stripe, BigDecimal math, multi-currency display | — |
@@ -126,6 +148,7 @@ docker compose up -d                        # Postgres (pgvector) + Redis
 .\mvnw.cmd spring-boot:run                  # local profile by default
 curl.exe http://localhost:8080/actuator/health
 docker compose down -v                      # wipe local DB volume (fresh schema)
+docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"   # cached keys
 ```
 
 ## Decision log (date — decision — why)
@@ -140,3 +163,15 @@ docker compose down -v                      # wipe local DB volume (fresh schema
 - 2026-09-12 — DB configured via DB_HOST/PORT/NAME/USERNAME/PASSWORD — Render's connection string is postgres://, not JDBC.
 - 2026-09-12 — Factory fails fast at startup on missing/duplicate creators — replaces UnsupportedPropertyTypeException.
 - 2026-09-12 — Removed Flyway baseline-on-migrate — it would skip V1 on a non-empty database.
+- 2026-09-13 — Listings REST API added in phase 2 — caching needs real reads/writes to show and test.
+- 2026-09-13 — Listing by id cached in Caffeine (30s) + Redis (10m); search pages Redis-only (5m) — hot/few vs many/shared.
+- 2026-09-13 — Invalidate after commit via @TransactionalEventListener — pre-commit eviction lets readers re-cache old rows.
+- 2026-09-13 — Search cache partitioned by city (key starts `city:<encoded>|`) — targeted flush keeps hit ratio.
+- 2026-09-13 — Immediate removal/writes (evictIfPresent, invalidate, immediateWrites) — Lettuce makes evict/clear/put async.
+- 2026-09-13 — Redis optional at runtime (errors logged, treated as misses; 500ms timeout) — outage slows, never breaks.
+- 2026-09-13 — No Redis pub/sub L1 invalidation — single instance; documented as the multi-instance fix.
+- 2026-09-13 — Factory update path; PUT = full replacement; type immutable; `CreatePropertyRequest` → `PropertyRequest`.
+- 2026-09-13 — Deleting a listing with bookings → 409 — bookings are history/payment records.
+- Open: /actuator/health goes DOWN when Redis is down (app still works) — decide in phase 9.
+- Open: concurrent PUTs on one listing → optimistic-lock failure currently a 500 — handle in phase 3.
+- Open: maxPrice filter ignores currency — fix in phase 5.

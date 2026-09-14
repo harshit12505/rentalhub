@@ -1,0 +1,13 @@
+{
+  "type": "CABIN",
+  "title": "Pine forest cabin",
+  "description": "Wooden cabin with a wood stove and a mountain view.",
+  "city": "Manali",
+  "country": "India",
+  "pricePerNight": 4000,
+  "currency": "INR",
+  "maxGuests": 4,
+  "bedrooms": 2,
+  "bathrooms": 1,
+  "attributes": { "heatingType": "wood_stove", "distanceToTownKm": "14.5" }
+}

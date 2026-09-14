@@ -7,7 +7,7 @@ added at the end of every phase.
 **Contents**
 1. [Where the project stands](#1-where-the-project-stands)
 2. [Your to-do list](#2-your-to-do-list)
-3. [Log: session 1 — spec review and Phase 1](#3-log-session-1--spec-review-and-phase-1-1213-sep-2026)
+3. [Log](#3-log) (newest first)
 4. [Decisions register](#4-decisions-register)
 5. [Problems we hit and how they were fixed](#5-problems-we-hit-and-how-they-were-fixed)
 6. [YouTube study plan — every phase](#6-youtube-study-plan--every-phase)
@@ -21,8 +21,8 @@ added at the end of every phase.
 | Phase | What | Status | Commit |
 |---|---|---|---|
 | 1 | Foundation | ✅ done | `739c2d0` |
-| 2 | Caching (Caffeine + Redis) | next — waiting for your go-ahead | |
-| 3 | Bookings & concurrency | | |
+| 2 | Caching (Caffeine + Redis) + listings REST API | ✅ done | `Phase 2: …` (see `git log`) |
+| 3 | Bookings & concurrency | next — waiting for your go-ahead | |
 | 4 | Auditing & scheduling | | |
 | 5 | Payments & money | | |
 | 6 | AI / RAG | | |
@@ -30,45 +30,78 @@ added at the end of every phase.
 | 8 | Frontend (Thymeleaf) | | |
 | 9 | Ship: seeder, Docker, Render | | |
 
-**Numbers after Phase 1:** 52 automated tests (42 unit, 10 against a real Postgres),
-all passing. The app boots in about 10 seconds and `/actuator/health` returns `UP`.
+**Numbers after Phase 2:** 86 automated tests (59 unit, 27 integration against real
+Postgres and Redis), all passing. Five REST endpoints for listings. The app keeps working
+when Redis is down.
 
 ---
 
 ## 2. Your to-do list
 
-### Before Phase 2 (recommended)
-- [ ] Start **Docker Desktop** and wait for "Engine running".
-- [ ] Wipe the old local database, which still has the draft V1: `docker compose down -v`,
-      then `docker compose up -d`.
-- [ ] Run the tests yourself: `.\mvnw.cmd test` → expect `Tests run: 52, Failures: 0`.
-- [ ] Run the app on port 8081 (Oracle has 8080): `$env:PORT = "8081"`, then
-      `.\mvnw.cmd spring-boot:run`, then in another window
-      `curl.exe http://localhost:8081/actuator/health` → expect `"status":"UP"`.
-- [ ] Open the project in **IntelliJ** (File → Open → `C:\dev\rentalhub`), set the SDK
-      to JDK 21, enable annotation processing if asked, run all tests from
-      `src/test/java`.
-- [ ] From now on, start Claude Code sessions **in `C:\dev\rentalhub`** so CLAUDE.md
-      loads automatically.
+### Before Phase 3 (recommended)
+- [ ] Work through the **[hands-on guide](hands-on-guide.md)**, Parts 0–18 (about 45
+      minutes). It covers everything in Phases 1 and 2: the tests, the database rules, every
+      API call and error, watching the cache live in Redis, a Redis outage, and seeing a
+      cache hit skip your code in the IntelliJ debugger. Every step lists the expected
+      result.
 
 ### Reading
-- [ ] [00 — Stack choices](00-stack-choices.md)
-- [ ] [01 — Foundation](01-foundation.md), and answer its interview questions out loud
-- [ ] The Foundations and Phase 1 videos in [section 6](#6-youtube-study-plan--every-phase)
+- [ ] [02 — Caching](02-caching.md), and answer its interview questions out loud
+- [ ] The Phase 2 videos in [section 6](#6-youtube-study-plan--every-phase)
 
-### Optional
-- [ ] Put the code on GitHub (needed for Render in Phase 9, and a free backup now):
-      create an empty **private** repo `rentalhub` on github.com, then
-      `git -C C:\dev\rentalhub remote add origin https://github.com/YOUR-USERNAME/rentalhub.git`
-      and `git -C C:\dev\rentalhub push -u origin main`.
-- [ ] Set your real name on commits if you want:
-      `git -C C:\dev\rentalhub config user.name "Your Name"`.
+### Still open from Phase 1
+- [ ] If not done yet: `docker compose down -v` once (old draft V1 in your local volume),
+      reading 00 and 01, opening the project in IntelliJ.
 
 ---
 
-## 3. Log: session 1 — spec review and Phase 1 (12–13 Sep 2026)
+## 3. Log
 
-### 3.1 Checking the spec before writing code
+### Session 2 — Phase 2: caching (13 Sep 2026)
+
+**Built**
+- **Two-tier listing cache.** `TwoLevelCache` puts Caffeine (30 s TTL, 10,000 entries)
+  in front of Redis (10 min TTL). Reads fall through local → Redis → database; writes
+  and evictions reach both tiers. Redis failures are caught, so the app degrades to local
+  caching.
+- **Search page cache** in Redis (5 min TTL), keyed on the normalised filter set, with the
+  city first so each city is its own partition.
+- **Invalidation after commit.**
+  - `PropertyService` publishes `PropertyChangedEvent` on create, update and delete.
+  - `PropertyCacheInvalidator` (`@TransactionalEventListener(AFTER_COMMIT)`) evicts the
+    listing from both tiers and flushes only the old city's, new city's and no-city
+    search pages.
+  - Pattern deletes use SCAN, not KEYS.
+- **Resilience:**
+  - `LoggingCacheErrorHandler` turns Redis errors into cache misses;
+  - 500 ms command timeout, 1 s connect timeout;
+  - the invalidator never throws.
+- **Updates.** The factory gained an update path using the same rules as create. The
+  type-specific step became `applyTypeFields(entity, attributes)`. `CreatePropertyRequest`
+  was renamed `PropertyRequest` (POST and PUT).
+- **REST API** `/api/properties`: GET one, search, POST, PUT and DELETE. The acting user
+  comes from the `X-Demo-User-Id` header. The rules: only hosts create, only the owner
+  edits or deletes, and a listing with bookings can't be deleted (409).
+- **Errors:** `GlobalExceptionHandler` now extends Spring's `ResponseEntityExceptionHandler`
+  and maps 400/403/404/409. Bean-validation failures list every bad field.
+- **Tests:** `IntegrationTest` base class (one shared context with Postgres + Redis
+  containers, cleanup after each test), `TwoLevelCacheTest`, `SearchCacheKeysTest`,
+  `PropertyCachingTest`, `PropertyApiTest`, `RedisDownTest`, and update tests in
+  `PropertyFactoryTest`.
+- **Docs:** [02 — Caching](02-caching.md), README "Trying the API", CLAUDE.md conventions.
+
+**Judgement calls (explained before coding)**
+- REST endpoints arrived in this phase, because caching needs something to cache.
+- Listings are cached in **both** tiers; search pages only in Redis.
+- Search invalidation is **partitioned by city**, not "flush everything".
+- Cache writes wait for Redis (`immediateWrites`), trading about 1 ms for
+  read-your-writes consistency.
+
+**Result:** 86/86 tests passing.
+
+### Session 1 — spec review and Phase 1 (12–13 Sep 2026)
+
+#### Checking the spec before writing code
 - **Your machine:** JDK 21.0.12 (Temurin), Maven 3.9.16, Git 2.55, Docker 29.7 with
   Compose v5.4. Everything needed was installed.
 - **Surprise 1: the folder wasn't empty.** `C:\dev\rentalhub` already had a partial
@@ -91,7 +124,7 @@ all passing. The app boots in about 10 seconds and `/actuator/health` returns `U
   - Render's free tier has limited memory and sleeps when idle.
   - Tests will need Docker running.
 
-### 3.2 Your decisions
+#### Your decisions
 1. **Stack:** Spring Boot 4.1 + Spring AI 2.0.
 2. **Python for the AI part?** You asked whether to use Python if it's easier. I
    recommended staying with Java. The spec requires one container, "RAG built in Java
@@ -106,7 +139,7 @@ all passing. The app boots in about 10 seconds and `/actuator/health` returns `U
 7. **Learning docs** for every phase, plus YouTube topics.
 8. **Git:** your gmail, set for this repo only.
 
-### 3.3 What Phase 1 built and changed
+#### What Phase 1 built and changed
 - **Build:** moved to Spring Boot 4.1.1. Added the Maven wrapper (`mvnw.cmd`), the
   Boot 4 Flyway starter, an explicit Lombok annotation processor, and Mockito loaded as
   a Java agent.
@@ -146,8 +179,8 @@ all passing. The app boots in about 10 seconds and `/actuator/health` returns `U
   - `README.md` (Windows setup and troubleshooting);
   - `docs/learning/` (stack choices, the Phase 1 guide, this log);
   - `.gitattributes` keeps `mvnw` in Unix line endings for the Linux Docker build.
-- **Result:** 52/52 tests passing, the app boots in about 10 s, health `UP`. Committed
-  as `739c2d0` (59 files).
+- **Result:** 52/52 tests passing (42 unit, 10 real-Postgres), the app boots in about
+  10 s, health `UP`. Committed as `739c2d0` (59 files).
 
 ---
 
@@ -170,6 +203,16 @@ Why each non-obvious choice was made. Interviewers love "why".
 | D11 | Real Postgres (Testcontainers) in tests, never H2 | H2 doesn't understand our constraint, date ranges or pgvector |
 | D12 | Search built with Specifications | the "IS NULL OR" query broke on Postgres and was index-unfriendly |
 | D13 | App keeps default port 8080 | Render sets `PORT` itself; locally you use 8081 because of Oracle |
+| D14 | REST endpoints for listings in Phase 2 | caching needs real reads and writes to demonstrate and test |
+| D15 | Listings cached in both tiers, search pages in Redis only | listings are few and very hot; search pages are many, moderately hot, and need pattern deletes |
+| D16 | Cache immutable DTO records as typed JSON, never entities | entities are session-bound and mutable; typed JSON is readable and safe to deserialize |
+| D17 | Invalidate after commit via an event listener | evicting before the commit lets a reader re-cache the old row |
+| D18 | Flush search pages by city partition | precise invalidation keeps the hit ratio high; flushing everything is correct but wasteful |
+| D19 | Immediate cache removal and writes (`evictIfPresent`, `invalidate`, `immediateWrites`) | Spring allows `evict`/`clear` to be deferred, and with Lettuce they are |
+| D20 | Redis is optional at runtime | a cache outage should slow the app, not break it |
+| D21 | No pub/sub invalidation between instances | single-instance deployment; documented as the multi-instance fix (YAGNI) |
+| D22 | Updates reuse the factory; PUT is a full replacement; type can't change | an edit must never bypass a rule creation enforces |
+| D23 | Deleting a listing with bookings is refused (409) | bookings are history and, from Phase 5, payment records |
 
 ---
 
@@ -190,6 +233,11 @@ Each of these is a good "tell me about a problem you solved" story.
 | 5.9 | Studio creator changed the caller's request | shortcut to force bedrooms to 0 | `enforceInvariants` hook plus a test proving the request is untouched |
 | 5.10 | Cabins would be rejected on Turkish-language machines | `toUpperCase()` follows the computer's language (i → İ) | `toUpperCase(Locale.ROOT)` plus a test run under a Turkish locale |
 | 5.11 | Flyway setting could skip V1 entirely | `baseline-on-migrate` assumes existing tables are already at V1 | removed |
+| 5.12 | Flushed search pages were still served | Spring's cache contract allows `clear()`/`evict()` to be deferred, and with Lettuce Spring Data Redis really does them asynchronously (confirmed in its bytecode) | invalidate with the immediate methods (`evictIfPresent`, writer `invalidate`) |
+| 5.13 | A page just cached was not yet in Redis | cache *writes* are asynchronous with Lettuce too | `immediateWrites()` on the Redis cache writer |
+| 5.14 | An API test expected the new listing to have id 1 | Postgres id counters are not rolled back with a transaction | the test accepts any id |
+| 5.15 | Harmless Netty errors when the Redis-down test shut down | Lettuce was still retrying the dead port | that logger silenced in that test only |
+| 5.16 | A GitHub push kept failing with "Repository not found" | the remote had been added with the placeholder `YOUR-USERNAME` | `git remote set-url origin` with the real address |
 
 ---
 
@@ -202,8 +250,8 @@ Each of these is a good "tell me about a problem you solved" story.
 - Spring Boot 3 videos are fine for concepts: Boot 4 mostly renamed packages and
   dependencies.
 - Tick the box when you can explain the "you should be able to" line without notes.
-- Watch **Foundations** and **Phase 1** now; each later phase's list just before or
-  during that phase.
+- Watch **Foundations**, **Phase 1** and **Phase 2** now; each later phase's list just
+  before or during that phase.
 
 **Channels that cover these topics well:** Amigoscode · Java Brains · Dan Vega ·
 Telusko · Marco Codes · SpringDeveloper (official) · Hussein Nasser (databases, backend) ·
@@ -253,7 +301,14 @@ ByteByteGo (system-design concepts) · Fireship (quick overviews) · TechWorld w
 - [ ] [caffeine cache spring boot](https://www.youtube.com/results?search_query=caffeine+cache+spring+boot) — in-process cache, size and expiry limits
 - [ ] [cache aside pattern](https://www.youtube.com/results?search_query=cache+aside+pattern) — read-through vs write-through vs cache-aside
 - [ ] [cache invalidation strategies](https://www.youtube.com/results?search_query=cache+invalidation+strategies) — why "the hardest problem in computer science"
+- [ ] [cache stampede thundering herd](https://www.youtube.com/results?search_query=cache+stampede+thundering+herd) — what `sync = true` prevents
+- [ ] [W-TinyLFU cache eviction](https://www.youtube.com/results?search_query=W-TinyLFU+cache+eviction) — optional: how Caffeine picks what to drop
+- [ ] [redis scan vs keys](https://www.youtube.com/results?search_query=redis+scan+vs+keys) — why KEYS is banned in production
 - [ ] [redis pub sub](https://www.youtube.com/results?search_query=redis+pub+sub+tutorial) — how multiple servers could clear local caches together
+- [ ] [spring transactionaleventlistener](https://www.youtube.com/results?search_query=spring+transactionaleventlistener) — running code only after a commit
+- [ ] [rest api status codes](https://www.youtube.com/results?search_query=rest+api+http+status+codes+explained) — 200, 201, 204, 400, 403, 404, 409
+- [ ] [put vs patch rest api](https://www.youtube.com/results?search_query=put+vs+patch+rest+api) — full replacement vs partial change
+- [ ] [mockmvc spring boot tutorial](https://www.youtube.com/results?search_query=mockmvc+spring+boot+tutorial) — testing the web layer without a server
 
 ### Phase 3 — Bookings & concurrency
 - [ ] [database transactions acid explained](https://www.youtube.com/results?search_query=database+transactions+acid+explained) — atomicity, isolation
@@ -340,7 +395,7 @@ None are needed yet, and each is optional because the app works without it.
 | 5 | Stripe (test mode keys) | stripe.com | free |
 | 6 | Gemini API key | aistudio.google.com | free tier, no card |
 | 7 | AWS (S3 bucket + access keys) | aws.amazon.com | free tier, but signup needs a card |
-| 9 | GitHub (for Render to deploy from) | github.com | free |
+| 9 | GitHub (for Render to deploy from) | github.com | free — ✅ already set up |
 | 9 | Render | render.com (sign in with GitHub) | free tier |
 
 ---
@@ -355,11 +410,16 @@ Run these from `C:\dev\rentalhub`.
 | Check they're healthy | `docker compose ps` |
 | Wipe the local database | `docker compose down -v` |
 | Run all tests (Docker must be running) | `.\mvnw.cmd test` |
-| Run one test class | `.\mvnw.cmd test "-Dtest=PropertyFactoryTest"` |
+| Run one test class | `.\mvnw.cmd test "-Dtest=PropertyCachingTest"` |
 | Use port 8081 (Oracle has 8080) | `$env:PORT = "8081"` |
 | Start the app | `.\mvnw.cmd spring-boot:run` |
 | Health check | `curl.exe http://localhost:8081/actuator/health` |
+| Which caches exist | `curl.exe http://localhost:8081/actuator/caches` |
 | Look inside the database | `docker exec -it rentalhub-postgres psql -U rentalhub -d rentalhub` |
 | List tables (inside psql) | `\dt` |
+| List cached keys | `docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"` |
+| Watch Redis commands live | `docker exec -it rentalhub-redis redis-cli MONITOR` |
+| Stop / start Redis | `docker stop rentalhub-redis` / `docker start rentalhub-redis` |
 | See what's using a port | `Get-NetTCPConnection -LocalPort 8080 -State Listen` |
 | Git history | `git log --oneline` |
+| Push to GitHub | `git push` |

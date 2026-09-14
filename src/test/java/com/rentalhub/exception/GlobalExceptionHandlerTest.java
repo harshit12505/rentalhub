@@ -39,4 +39,22 @@ class GlobalExceptionHandlerTest {
 
         assertThat(problem.getDetail()).isEqualTo("Plot area (m²) is required for this type of property.");
     }
+
+    @Test
+    @DisplayName("not found, not allowed and conflict become 404, 403 and 409, with ids printed plainly")
+    void statusMapping() {
+        ProblemDetail notFound = handler.handleNotFound(
+                new ResourceNotFoundException("property.notFound", 12345L), Locale.ENGLISH);
+        ProblemDetail notAllowed = handler.handleNotAllowed(
+                new OperationNotAllowedException("property.notOwner"), Locale.ENGLISH);
+        ProblemDetail conflict = handler.handleConflict(
+                new ConflictException("property.delete.hasBookings"), Locale.ENGLISH);
+
+        assertThat(notFound.getStatus()).isEqualTo(404);
+        // {0,number,#} in the message: an id is not a quantity, so no "12,345".
+        assertThat(notFound.getDetail()).isEqualTo("There is no listing with id 12345.");
+        assertThat(notAllowed.getStatus()).isEqualTo(403);
+        assertThat(conflict.getStatus()).isEqualTo(409);
+        assertThat(conflict.getProperties()).containsEntry("messageKey", "property.delete.hasBookings");
+    }
 }

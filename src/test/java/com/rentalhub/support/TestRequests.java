@@ -4,7 +4,7 @@ import com.rentalhub.domain.model.User;
 import com.rentalhub.domain.model.enums.Currency;
 import com.rentalhub.domain.model.enums.PropertyType;
 import com.rentalhub.domain.model.enums.UserRole;
-import com.rentalhub.dto.CreatePropertyRequest;
+import com.rentalhub.dto.PropertyRequest;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -24,8 +24,8 @@ public final class TestRequests {
     }
 
     /** Shared fields that satisfy every type's rules on their own. */
-    public static CreatePropertyRequest base(PropertyType type) {
-        CreatePropertyRequest request = new CreatePropertyRequest();
+    public static PropertyRequest base(PropertyType type) {
+        PropertyRequest request = new PropertyRequest();
         request.setType(type);
         request.setTitle("Test " + type.name().toLowerCase());
         request.setDescription("A pleasant place to stay.");
@@ -39,14 +39,14 @@ public final class TestRequests {
         return request;
     }
 
-    public static CreatePropertyRequest validApartment() {
-        CreatePropertyRequest request = base(PropertyType.APARTMENT);
+    public static PropertyRequest validApartment() {
+        PropertyRequest request = base(PropertyType.APARTMENT);
         request.getAttributes().put("floorNumber", "3");
         return request;
     }
 
-    public static CreatePropertyRequest validVilla() {
-        CreatePropertyRequest request = base(PropertyType.VILLA);
+    public static PropertyRequest validVilla() {
+        PropertyRequest request = base(PropertyType.VILLA);
         request.setCity("Goa");
         request.setPricePerNight(new BigDecimal("12000.00"));
         request.setMaxGuests(6);
@@ -56,16 +56,16 @@ public final class TestRequests {
         return request;
     }
 
-    public static CreatePropertyRequest validCabin() {
-        CreatePropertyRequest request = base(PropertyType.CABIN);
+    public static PropertyRequest validCabin() {
+        PropertyRequest request = base(PropertyType.CABIN);
         request.setCity("Manali");
         request.getAttributes().put("heatingType", "wood_stove");
         request.getAttributes().put("distanceToTownKm", "14.5");
         return request;
     }
 
-    public static CreatePropertyRequest validStudio() {
-        CreatePropertyRequest request = base(PropertyType.STUDIO);
+    public static PropertyRequest validStudio() {
+        PropertyRequest request = base(PropertyType.STUDIO);
         request.setBedrooms(0);
         request.getAttributes().put("areaSqm", "28");
         request.getAttributes().put("hasSofaBed", "true");
@@ -73,7 +73,7 @@ public final class TestRequests {
     }
 
     /** One valid request per type, for rules that must hold for every type. */
-    public static List<CreatePropertyRequest> oneValidPerType() {
+    public static List<PropertyRequest> oneValidPerType() {
         return List.of(validApartment(), validVilla(), validCabin(), validStudio());
     }
 }

@@ -4,10 +4,10 @@ import com.rentalhub.domain.model.Property;
 import com.rentalhub.domain.model.User;
 import com.rentalhub.domain.repository.PropertyRepository;
 import com.rentalhub.domain.repository.UserRepository;
-import com.rentalhub.dto.CreatePropertyRequest;
+import com.rentalhub.dto.PropertyRequest;
 import com.rentalhub.factory.PropertyFactory;
+import com.rentalhub.support.IntegrationTest;
 import com.rentalhub.support.TestRequests;
-import com.rentalhub.support.TestcontainersConfiguration;
 import jakarta.persistence.EntityManager;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
@@ -15,8 +15,6 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,10 +33,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * {@code @Transactional} rolls every test back, so tests never see each other's rows.
  */
-@SpringBootTest
-@Import(TestcontainersConfiguration.class)
 @Transactional
-class PersistenceMappingTest {
+class PersistenceMappingTest extends IntegrationTest {
 
     private static final PageRequest FIRST_PAGE = PageRequest.of(0, 20);
 
@@ -71,7 +67,7 @@ class PersistenceMappingTest {
     void everyTypeRoundTrips() {
         User host = users.save(TestRequests.host());
         List<Property> saved = new ArrayList<>();
-        for (CreatePropertyRequest request : TestRequests.oneValidPerType()) {
+        for (PropertyRequest request : TestRequests.oneValidPerType()) {
             saved.add(properties.saveAndFlush(factory.create(request, host)));
         }
         // Forget everything Hibernate has cached, so the reads below really hit the database.
@@ -115,7 +111,7 @@ class PersistenceMappingTest {
     @Test
     @DisplayName("bean validation messages are read from messages.properties")
     void validationMessagesAreLocalised() {
-        CreatePropertyRequest request = TestRequests.validApartment();
+        PropertyRequest request = TestRequests.validApartment();
         request.setTitle("x".repeat(151));
         request.setCity(" ");
 

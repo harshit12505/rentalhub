@@ -18,11 +18,12 @@ One deployable Spring Boot application. No separate frontend build, no npm, no s
 | Phase | What | Status |
 |---|---|---|
 | 1 | Foundation: build, schema, domain model, Factory pattern, tests | ✅ |
-| 2–9 | Caching, bookings, auditing, payments, AI/RAG, extras, frontend, deploy | not started |
+| 2 | Caching: Caffeine + Redis two-tier cache, after-commit invalidation, listings REST API | ✅ |
+| 3–9 | Bookings, auditing, payments, AI/RAG, extras, frontend, deploy | not started |
 
-There are no HTTP endpoints yet, so the running app serves only `/actuator/health`.
-That is expected at this stage, as is the startup warning
-`Cannot find template location: classpath:/templates/` (pages arrive in phase 8).
+The app has a REST API for listings (see [Trying the API](#trying-the-api-powershell)) and no
+web pages yet. The startup warning `Cannot find template location: classpath:/templates/` is
+expected until pages arrive in phase 8.
 
 ---
 
@@ -83,7 +84,60 @@ docker compose up -d
 | Tests fail with `Could not find a valid Docker environment` | Docker Desktop isn't running | Start Docker Desktop, wait for "Engine running", re-run |
 | App fails with `Validate failed: Migration checksum mismatch for migration version 1` | Your local DB was created by an earlier draft of V1 | `docker compose down -v`, then `docker compose up -d` |
 | `Connection refused` to `localhost:5432` | Containers aren't up | `docker compose up -d`, then `docker compose ps` |
+| Log shows `cache.shared.unavailable` or `Unable to connect to Redis` | Redis isn't running | The app keeps working without the shared cache. Start it: `docker compose up -d` |
 | A `-Dsomething=value` flag is ignored or errors | PowerShell splits unquoted `-D` args at the dot | Quote it: `.\mvnw.cmd test "-Dtest=PropertyFactoryTest"` |
+
+---
+
+## Trying the API (PowerShell)
+
+> **Want to test everything yourself, step by step?** Follow
+> [`docs/learning/hands-on-guide.md`](docs/learning/hands-on-guide.md): every feature, with
+> the exact command and the expected result. Ready-made request bodies are in
+> [`samples/api/`](samples/api/README.md).
+
+| Method | Path | Who | What |
+|---|---|---|---|
+| `GET` | `/api/properties/{id}` | anyone | One listing. Cached: Caffeine → Redis → database |
+| `GET` | `/api/properties?city=&guests=&maxPrice=&page=&size=` | anyone | One page of search results. Cached in Redis |
+| `POST` | `/api/properties` | a host | Create a listing |
+| `PUT` | `/api/properties/{id}` | that listing's host | Replace a listing (full new state) |
+| `DELETE` | `/api/properties/{id}` | that listing's host | Delete a listing (409 if it has bookings) |
+
+There is no login: the acting user is sent in an `X-Demo-User-Id` header. There is no demo
+data until phase 9, so first create a host by hand (note the `id` it prints):
+
+```powershell
+docker exec -it rentalhub-postgres psql -U rentalhub -d rentalhub -c "INSERT INTO users (full_name, email, role) VALUES ('Asha Menon', 'asha@example.com', 'HOST') RETURNING id;"
+```
+
+With the app running on port 8081, build a listing:
+
+```powershell
+$villa = @{ type = "VILLA"; title = "Sea breeze villa"; description = "Four bedrooms near the beach."; city = "Goa"; country = "India"; pricePerNight = 12000; currency = "INR"; maxGuests = 8; bedrooms = 4; bathrooms = 3; attributes = @{ plotAreaSqm = "450"; hasPool = "true" } } | ConvertTo-Json
+```
+
+Create it as user 1:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:8081/api/properties -Headers @{ "X-Demo-User-Id" = "1" } -ContentType "application/json" -Body $villa
+```
+
+Read it back, then search:
+
+```powershell
+Invoke-RestMethod http://localhost:8081/api/properties/1
+```
+
+```powershell
+Invoke-RestMethod "http://localhost:8081/api/properties?city=goa&guests=4"
+```
+
+See what is cached in Redis (the app log also prints `cache.miss` whenever the database is read):
+
+```powershell
+docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"
+```
 
 ---
 
