@@ -10,6 +10,7 @@ interview. One doc per phase, written as each phase is built.
 | [00 — Stack choices](00-stack-choices.md) | Why each technology, what the alternatives were, and what to say when asked |
 | [01 — Foundation](01-foundation.md) | Maven, Spring Boot, JPA/Hibernate, Flyway, the schema, the double-booking constraint, BigDecimal, the Factory + Template Method patterns, i18n keys, testing |
 | [02 — Caching](02-caching.md) | Cache-aside, Caffeine + Redis tiers, W-TinyLFU, cache stampedes, search keys and partitions, after-commit invalidation, SCAN vs KEYS, deferred vs immediate removal, Redis outages, the REST API, N+1 |
+| [03 — Bookings and concurrency](03-bookings.md) | The double-booking race, ACID and isolation levels, optimistic locking and `OPTIMISTIC_FORCE_INCREMENT`, retry with backoff and jitter, recover, the self-invocation trap, the exclusion constraint under concurrency, the deadlock we found, testing races deterministically |
 
 ## How to use them
 
@@ -50,3 +51,18 @@ interview. One doc per phase, written as each phase is built.
 | **Pub/sub** | Publish/subscribe messaging: a message sent to a channel reaches everyone listening at that moment. |
 | **Event listener** | Code that runs when something announces an event; `@TransactionalEventListener` can wait until the transaction commits. |
 | **HTTP status codes** | 200 OK, 201 Created, 204 No Content, 400 bad request, 403 not allowed, 404 not found, 409 conflict with the current state. |
+| **Race condition** | A bug where the result depends on the timing of two things running at once. |
+| **Check-then-act** | Checking a condition and then acting on it, when the condition can change in between. The classic race (also called TOCTOU). |
+| **ACID** | A transaction's promises: Atomic (all or nothing), Consistent (constraints hold), Isolated (no half-done work seen), Durable (committed means kept). |
+| **Isolation level** | How much a transaction sees of others running at the same time. Postgres's default is READ COMMITTED: each statement sees what was committed before it started. |
+| **MVCC** | Multi-version concurrency control: readers see a snapshot of committed data and never wait for writers. |
+| **Pessimistic locking** | Lock the row while you work (`SELECT … FOR UPDATE`); anyone else who wants it waits. |
+| **Force increment** | Raising an entity's version on commit even though it didn't change, so concurrent transactions on it collide. |
+| **Deadlock** | Two transactions each waiting for the other, forever. The database detects it and cancels one. |
+| **Retry with backoff** | Trying a failed operation again after a wait that grows each time. |
+| **Jitter** | A random amount added to each retry wait, so two clients don't retry in lockstep. |
+| **Recover** | What to do when the retries run out: here, a clear 409 instead of an error. |
+| **Idempotent** | Safe to repeat: doing it twice has the same effect as doing it once. |
+| **Proxy (Spring)** | An object Spring puts in front of your bean to add behaviour around its method calls: transactions, caching, retry. |
+| **Self-invocation** | A bean calling its own method through `this`. The call skips the proxy, so `@Transactional` doesn't apply. |
+| **Flaky test** | A test that passes or fails at random, usually because it depends on timing. |

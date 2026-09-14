@@ -2,7 +2,10 @@ package com.rentalhub.exception;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
+import org.springframework.context.MessageSourceResolvable;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.context.support.DefaultMessageSourceResolvable;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -40,15 +43,18 @@ import java.util.Map;
 @RestControllerAdvice(annotations = RestController.class)
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
+    static final String CONCURRENT_UPDATE = "error.concurrentUpdate";
+
     private final MessageSource messages;
 
     public GlobalExceptionHandler(MessageSource messages) {
         this.messages = messages;
     }
 
-    @ExceptionHandler(PropertyValidationException.class)
-    public ProblemDetail handlePropertyValidation(PropertyValidationException ex, Locale locale) {
-        log.debug("Listing rejected: messageKey={} field={}", ex.getMessageKey(), ex.getField());
+    /** A business rule refused the request: a listing's type rules, a booking's date rules. */
+    @ExceptionHandler(InvalidRequestException.class)
+    public ProblemDetail handleInvalidRequest(InvalidRequestException ex, Locale locale) {
+        log.debug("Request rejected: messageKey={} field={}", ex.getMessageKey(), ex.getField());
         ProblemDetail problem = localizedProblem(HttpStatus.BAD_REQUEST, ex, locale);
         if (ex.getField() != null) {
             problem.setProperty("field", ex.getField());
@@ -69,6 +75,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ProblemDetail handleConflict(ConflictException ex, Locale locale) {
         return localizedProblem(HttpStatus.CONFLICT, ex, locale);
+    }
+
+    /**
+     * Two requests changed the same rows at the same moment and this one lost: its
+     * version check failed (optimistic locking), for example a host saving a listing just
+     * as a guest booked it, or Postgres broke a deadlock by cancelling it. Nothing was
+     * saved, so trying again is safe, hence 409 rather than 500. A booking that loses
+     * such a race is retried by BookingService instead, which has its own message if it
+     * keeps losing.
+     */
+    @ExceptionHandler(ConcurrencyFailureException.class)
+    public ProblemDetail handleConcurrentUpdate(ConcurrencyFailureException ex, Locale locale) {
+        log.info("request.conflict reason=concurrent-update error=\"{}\"", ex.getMessage());
+        return problem(HttpStatus.CONFLICT, new DefaultMessageSourceResolvable(CONCURRENT_UPDATE),
+                CONCURRENT_UPDATE, locale);
     }
 
     /**
@@ -94,10 +115,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     private ProblemDetail localizedProblem(HttpStatus status, LocalizedException ex, Locale locale) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, messages.getMessage(ex, locale));
+        return problem(status, ex, ex.getMessageKey(), locale);
+    }
+
+    private ProblemDetail problem(HttpStatus status, MessageSourceResolvable message, String messageKey, Locale locale) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, messages.getMessage(message, locale));
         problem.setTitle(title(status, locale));
         // The key lets API clients react to a specific error without parsing translated text.
-        problem.setProperty("messageKey", ex.getMessageKey());
+        problem.setProperty("messageKey", messageKey);
         return problem;
     }
 

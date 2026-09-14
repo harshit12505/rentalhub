@@ -70,6 +70,26 @@ public class Booking {
     @Setter(AccessLevel.NONE)
     private Instant createdAt;
 
+    /**
+     * A booking for these dates, priced from the listing as it stands right now: the
+     * nightly price times the number of nights, in the listing's own currency.
+     * Status is left at PENDING; the caller decides when the booking is confirmed.
+     */
+    public static Booking reserve(Property property, User guest, LocalDate checkIn, LocalDate checkOut, int guests) {
+        Booking booking = new Booking();
+        booking.property = property;
+        booking.guest = guest;
+        booking.checkIn = checkIn;
+        booking.checkOut = checkOut;
+        booking.guests = guests;
+        booking.currency = property.getCurrency();
+        // Exact: a price never has more decimals than its currency (the factory refuses
+        // it), so round() only fixes the scale, e.g. 7500.0000 → 7500.00.
+        booking.totalAmount = booking.currency.round(
+                property.getPricePerNight().multiply(BigDecimal.valueOf(booking.nights())));
+        return booking;
+    }
+
     @PrePersist
     void onCreate() {
         this.createdAt = Instant.now();
