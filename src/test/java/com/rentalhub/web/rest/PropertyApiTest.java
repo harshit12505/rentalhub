@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 class PropertyApiTest extends IntegrationTest {
 
-    private static final String HEADER = PropertyController.DEMO_USER_HEADER;
+    private static final String HEADER = ApiHeaders.DEMO_USER_ID;
 
     /** A villa as a client would send it. Attribute values may be plain JSON numbers and booleans. */
     private static final String VILLA_JSON = """

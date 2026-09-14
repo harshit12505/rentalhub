@@ -1,5 +1,6 @@
 package com.rentalhub.cache;
 
+import com.rentalhub.service.ListingBookedEvent;
 import com.rentalhub.service.PropertyChangedEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
@@ -55,6 +56,22 @@ class PropertyCacheInvalidator {
         } catch (RuntimeException e) {
             log.warn("cache.invalidation.failed propertyId={} searchPartitions={} error=\"{}\"",
                     event.propertyId(), partitions, e.getMessage());
+        }
+    }
+
+    /**
+     * A booking raised the listing's version, which the cached listing view shows. Only
+     * that entry is evicted: search pages don't show the version, and flushing them on
+     * every booking would throw away pages that are still correct.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onListingBooked(ListingBookedEvent event) {
+        try {
+            requiredCache(CacheNames.PROPERTY_BY_ID).evictIfPresent(event.propertyId());
+            log.debug("cache.invalidated propertyId={} reason=booking", event.propertyId());
+        } catch (RuntimeException e) {
+            log.warn("cache.invalidation.failed propertyId={} reason=booking error=\"{}\"",
+                    event.propertyId(), e.getMessage());
         }
     }
 

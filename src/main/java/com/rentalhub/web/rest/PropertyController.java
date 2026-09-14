@@ -29,15 +29,13 @@ import java.net.URI;
  * Listings over REST.
  *
  * There is no login in this project. The acting user is named by the
- * {@value #DEMO_USER_HEADER} header, standing in for the "sign in as" switcher the web
- * pages get in phase 8. The controller only translates HTTP to service calls; every
+ * {@value ApiHeaders#DEMO_USER_ID} header, standing in for the "sign in as" switcher the
+ * web pages get in phase 8. The controller only translates HTTP to service calls; every
  * rule (who may create, who may edit, what is valid) is enforced in the service.
  */
 @RestController
 @RequestMapping("/api/properties")
 public class PropertyController {
-
-    public static final String DEMO_USER_HEADER = "X-Demo-User-Id";
 
     private final PropertyService propertyService;
     private final SearchService searchService;
@@ -62,7 +60,7 @@ public class PropertyController {
     }
 
     @PostMapping
-    public ResponseEntity<PropertyView> create(@RequestHeader(DEMO_USER_HEADER) long userId,
+    public ResponseEntity<PropertyView> create(@RequestHeader(ApiHeaders.DEMO_USER_ID) long userId,
                                                @Valid @RequestBody PropertyRequest request) {
         PropertyView created = propertyService.create(request, userId);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
@@ -73,14 +71,14 @@ public class PropertyController {
     /** Full replacement: the body is the listing's complete new state (see PropertyRequest). */
     @PutMapping("/{id}")
     public PropertyView update(@PathVariable long id,
-                               @RequestHeader(DEMO_USER_HEADER) long userId,
+                               @RequestHeader(ApiHeaders.DEMO_USER_ID) long userId,
                                @Valid @RequestBody PropertyRequest request) {
         return propertyService.update(id, request, userId);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable long id, @RequestHeader(DEMO_USER_HEADER) long userId) {
+    public void delete(@PathVariable long id, @RequestHeader(ApiHeaders.DEMO_USER_ID) long userId) {
         propertyService.delete(id, userId);
     }
 }

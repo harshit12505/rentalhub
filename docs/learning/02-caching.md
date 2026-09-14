@@ -552,7 +552,8 @@ query, returned as a projection.
 - **Health shows DOWN when Redis is down**, though the app works. To be decided in Phase 9.
 - **Concurrent edits of one listing:** two hosts' PUTs at the same moment make the second
   fail with an optimistic-locking error, currently a 500. Phase 3 handles
-  optimistic-locking failures properly.
+  optimistic-locking failures properly. *(Fixed in Phase 3: it's now a 409, "Someone else
+  changed this at the same moment". See [03 — Bookings](03-bookings.md), §11.)*
 - **`X-Demo-User-Id` can be spoofed:** there's no authentication, by design.
 
 ---

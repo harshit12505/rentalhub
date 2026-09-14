@@ -21,33 +21,42 @@ added at the end of every phase.
 | Phase | What | Status | Commit |
 |---|---|---|---|
 | 1 | Foundation | ✅ done | `739c2d0` |
-| 2 | Caching (Caffeine + Redis) + listings REST API | ✅ done | `Phase 2: …` (see `git log`) |
-| 3 | Bookings & concurrency | next — waiting for your go-ahead | |
-| 4 | Auditing & scheduling | | |
+| 2 | Caching (Caffeine + Redis) + listings REST API | ✅ done | `65f35f4` (+ docs `cf09f86`), PR #1 |
+| 3 | Bookings & concurrency | ✅ done | `Phase 3: …` on branch `phase-3-bookings` (see `git log`) |
+| 4 | Auditing & scheduling | next — waiting for your go-ahead | |
 | 5 | Payments & money | | |
 | 6 | AI / RAG | | |
 | 7 | S3, i18n, GraphQL, OpenAPI, Postman | | |
 | 8 | Frontend (Thymeleaf) | | |
 | 9 | Ship: seeder, Docker, Render | | |
 
-**Numbers after Phase 2:** 86 automated tests (59 unit, 27 integration against real
-Postgres and Redis), all passing. Five REST endpoints for listings. The app keeps working
-when Redis is down.
+**Numbers after Phase 3:** 131 automated tests (80 unit, 51 integration against real
+Postgres and Redis), all passing. Ten REST endpoints: five for listings and five for
+bookings. Double bookings are impossible even under concurrent requests, and the app keeps
+working when Redis is down.
 
 ---
 
 ## 2. Your to-do list
 
-### Before Phase 3 (recommended)
-- [ ] Work through the **[hands-on guide](hands-on-guide.md)**, Parts 0–18 (about 45
-      minutes). It covers everything in Phases 1 and 2: the tests, the database rules, every
-      API call and error, watching the cache live in Redis, a Redis outage, and seeing a
-      cache hit skip your code in the IntelliJ debugger. Every step lists the expected
-      result.
+### Before Phase 4 (recommended)
+- [ ] Work through the **[hands-on guide](hands-on-guide.md)**.
+  - Parts 0–17 cover Phases 1 and 2 (about 45 minutes), if you haven't done them yet.
+  - **Parts 18–26 are new** (about 30 minutes): book, cancel and see every booking
+    error; race two bookings yourself; hold a real database lock in psql to watch a booking
+    wait, retry and charge the new price; then watch the database refuse an overlap the app
+    couldn't see.
+- [ ] **GitHub.**
+  - PR #1 (Phase 2) is still open. Merge it when you're happy with it.
+  - Phase 3 is committed on the branch `phase-3-bookings`, which is built on top of Phase 2
+    and hasn't been pushed. When you want it on GitHub, say so, and I'll push it and open its
+    PR.
 
 ### Reading
-- [ ] [02 — Caching](02-caching.md), and answer its interview questions out loud
-- [ ] The Phase 2 videos in [section 6](#6-youtube-study-plan--every-phase)
+- [ ] [03 — Bookings and concurrency](03-bookings.md), and answer its interview questions
+      out loud. Rehearse "how do you prevent double bookings?" until the answer is smooth.
+- [ ] The Phase 3 videos in [section 6](#6-youtube-study-plan--every-phase)
+- [ ] If not done yet: [02 — Caching](02-caching.md) and the Phase 2 videos
 
 ### Still open from Phase 1
 - [ ] If not done yet: `docker compose down -v` once (old draft V1 in your local volume),
@@ -56,6 +65,70 @@ when Redis is down.
 ---
 
 ## 3. Log
+
+### Session 3 — Phase 3: bookings & concurrency (14 Sep 2026)
+
+**Built**
+- **Bookings API:**
+  - `POST /api/bookings` — book a stay;
+  - `GET /api/bookings` — my trips;
+  - `GET /api/bookings/{id}` — for the guest or the host;
+  - `POST /api/bookings/{id}/cancel`;
+  - `GET /api/properties/{id}/bookings` — for the host.
+- **Pricing.** `Booking.reserve()` charges the nightly price × nights, in the listing's own
+  currency. `Currency.round()` uses half-even rounding.
+- **Rules.** `BookingRules`, with an injected `Clock`, checks:
+  - the dates;
+  - at most 90 nights (configurable);
+  - guests within the listing's limit;
+  - the listing is active;
+  - the stay ends by the listing's end date;
+  - the cancellation window.
+
+  Booking your own listing is a 403.
+- **Concurrency, in layers:**
+  - `BookingAttempt.place()` is one transaction per attempt. It loads the listing with
+    `@Lock(OPTIMISTIC_FORCE_INCREMENT)`, so bookings and edits of one listing race on its
+    version at commit;
+  - `BookingService.book()` uses Spring Framework 7's `RetryTemplate`. It retries
+    `ConcurrencyFailureException` with exponential backoff and jitter (50 → 100 → 200 ms,
+    ±25 ms, 3 retries). The recover path answers 409 `booking.dates.justTaken`;
+  - `OverlapConstraint` maps the exclusion-constraint violation (SQLState 23P01 plus the
+    constraint's name) to the same 409, without retrying.
+- **Cache.** A booking raises the listing's version, so `ListingBookedEvent` evicts that
+  listing's cache entry after commit. Search pages are untouched.
+- **Errors:**
+  - `InvalidRequestException` (400 + field) is now the base of `PropertyValidationException`;
+  - any `ConcurrencyFailureException` that reaches the API is a 409 `error.concurrentUpdate`.
+    This closes the Phase 2 open item about concurrent PUTs.
+- **Small refactor.** The `X-Demo-User-Id` constant moved to `ApiHeaders`.
+- **Tests:**
+  - unit: `BookingTest`, `BookingRulesTest`, `BookingServiceRetryTest`;
+  - integration: `BookingConcurrencyTest` (the two-thread race, plus two staged races that use
+    real row locks and `pg_stat_activity`) and `BookingApiTest`.
+- **Docs:**
+  - [03 — Bookings and concurrency](03-bookings.md);
+  - [hands-on guide](hands-on-guide.md) Parts 18–26;
+  - 14 booking request bodies in `samples/api/`;
+  - README and CLAUDE.md.
+
+**Judgement calls (explained before coding)**
+- `RetryTemplate` plus a try/catch recover, instead of `@Retryable` plus `@Recover`, because
+  Spring Framework 7 has no `@Recover`.
+- The lock is on the **listing**: every booking raises its version.
+  - Bonus: a booking is never charged a price that changed underneath it.
+  - Cost: a cache eviction per booking, and a host's save can collide with a booking (409).
+- Bookings are CONFIRMED immediately until Phase 5 adds payments.
+- The booking rules above. Any user may book, hosts included.
+- Cancel is an idempotent POST action, allowed until check-in day.
+
+**Found by testing:** a real deadlock inside the exclusion constraint (problem 5.17).
+
+**Verified by hand** against throwaway containers: every step of hands-on Parts 18–26,
+including holding a row lock in psql to watch a booking retry and pay the new price.
+
+**Result:** 131/131 tests passing (80 unit, 51 integration). Branch `phase-3-bookings`,
+built on `phase-2-caching` (PR #1 still open).
 
 ### Session 2 — Phase 2: caching (13 Sep 2026)
 
@@ -213,6 +286,19 @@ Why each non-obvious choice was made. Interviewers love "why".
 | D21 | No pub/sub invalidation between instances | single-instance deployment; documented as the multi-instance fix (YAGNI) |
 | D22 | Updates reuse the factory; PUT is a full replacement; type can't change | an edit must never bypass a rule creation enforces |
 | D23 | Deleting a listing with bookings is refused (409) | bookings are history and, from Phase 5, payment records |
+| D24 | Bookings read the listing with `OPTIMISTIC_FORCE_INCREMENT` | bookings and edits of one listing take turns without holding a lock; a booking never commits a stale price |
+| D25 | Spring Framework 7 `RetryTemplate` plus a try/catch recover, not `@Retryable`/`@Recover` | Framework 7 has no `@Recover`; "retry → transaction → recover" is visible in the code; unit-testable without Spring |
+| D26 | The transactional attempt lives in its own bean (`BookingAttempt`) | a call to `this` skips Spring's proxy, so it would get no transaction and a retry could never be a fresh one |
+| D27 | Retry `ConcurrencyFailureException` (lost version race, deadlock victim), nothing else | both fail only because of timing; "already booked" or a broken rule would fail again |
+| D28 | The overlap-constraint violation becomes "just taken" straight away, not retried | a retry could only give the same answer, less precisely |
+| D29 | Keep the "already booked" check before inserting | the cheap, precise answer for the everyday case; the guarantee comes after it |
+| D30 | A booking evicts only its listing's cache entry | the cached view shows the version; search pages don't |
+| D31 | Bookings are CONFIRMED immediately until Phase 5 | there's no payment step yet; the same as Phase 5 without a Stripe key |
+| D32 | Booking rules: ≤ 90 nights (configurable), guests ≤ the listing's limit, stay ends by `availableUntil`, not your own listing, any role may book | the spec didn't say; each rule is a judgement call, flagged before coding |
+| D33 | Cancel is `POST /bookings/{id}/cancel`, idempotent, until check-in day | a cancelled booking stays on record; a repeated request is harmless |
+| D34 | Any `ConcurrencyFailureException` reaching the API is a 409 `error.concurrentUpdate` | "the data changed under you, try again", not "the server is broken" |
+| D35 | "Today" comes from an injected `Clock` (the JVM's zone) | rules can be tested with a fixed date; agrees with `@FutureOrPresent` |
+| D36 | `InvalidRequestException` (400 + field) as the base for every rule violation | one handler for listing and booking rules |
 
 ---
 
@@ -238,6 +324,8 @@ Each of these is a good "tell me about a problem you solved" story.
 | 5.14 | An API test expected the new listing to have id 1 | Postgres id counters are not rolled back with a transaction | the test accepts any id |
 | 5.15 | Harmless Netty errors when the Redis-down test shut down | Lettuce was still retrying the dead port | that logger silenced in that test only |
 | 5.16 | A GitHub push kept failing with "Repository not found" | the remote had been added with the placeholder `YOUR-USERNAME` | `git remote set-url origin` with the real address |
+| 5.17 | The race test failed on its 2nd run: `CannotAcquireLockException … deadlock detected` (SQLState 40P01) | an exclusion constraint adds its index entry *first* and then checks for conflicts. Two overlapping inserts at the same instant each found the other's uncommitted entry and waited for it, and Postgres cancelled one | retry every `ConcurrencyFailureException` (version race **and** deadlock), not only optimistic failures; the retry sees the survivor and answers correctly. Pinned by `deadlockVictimIsRetried`; the race test has passed repeatedly since |
+| 5.18 | The retry unit tests couldn't build their `RetryTemplate`: `Invalid maxDelay (0ms)` | Framework 7's `RetryPolicy` accepts a zero delay but requires a positive `maxDelay` | the tests use 1 ms |
 
 ---
 
@@ -250,8 +338,8 @@ Each of these is a good "tell me about a problem you solved" story.
 - Spring Boot 3 videos are fine for concepts: Boot 4 mostly renamed packages and
   dependencies.
 - Tick the box when you can explain the "you should be able to" line without notes.
-- Watch **Foundations**, **Phase 1** and **Phase 2** now; each later phase's list just
-  before or during that phase.
+- Watch **Foundations** and **Phases 1–3** now; each later phase's list just before or
+  during that phase.
 
 **Channels that cover these topics well:** Amigoscode · Java Brains · Dan Vega ·
 Telusko · Marco Codes · SpringDeveloper (official) · Hussein Nasser (databases, backend) ·
@@ -317,8 +405,14 @@ ByteByteGo (system-design concepts) · Fireship (quick overviews) · TechWorld w
 - [ ] [spring transactional explained](https://www.youtube.com/results?search_query=spring+transactional+annotation+explained) — proxies, rollback rules
 - [ ] [spring transactional pitfalls](https://www.youtube.com/results?search_query=spring+transactional+pitfalls+self+invocation) — self-invocation, why retry must wrap the transaction
 - [ ] [race condition explained](https://www.youtube.com/results?search_query=race+condition+explained+web+application) — the double-booking race
-- [ ] [java concurrency countdownlatch executorservice](https://www.youtube.com/results?search_query=java+concurrency+countdownlatch+executorservice) — how the two-thread test works
-- [ ] [retry exponential backoff](https://www.youtube.com/results?search_query=retry+with+exponential+backoff) — why retries wait longer each time
+- [ ] [jpa hibernate optimistic locking version](https://www.youtube.com/results?search_query=jpa+hibernate+optimistic+locking+version) — `@Version`, and what happens when it doesn't match
+- [ ] [jpa lock modes optimistic force increment](https://www.youtube.com/results?search_query=jpa+lock+modes+optimistic+force+increment) — why plain `OPTIMISTIC` can't stop two bookings
+- [ ] [postgresql row level locking](https://www.youtube.com/results?search_query=postgresql+row+level+locking+select+for+update) — `FOR UPDATE`, and what an UPDATE waits for
+- [ ] [postgresql mvcc explained](https://www.youtube.com/results?search_query=postgresql+mvcc+explained) — why readers never wait for writers
+- [ ] [postgresql deadlock explained](https://www.youtube.com/results?search_query=postgresql+deadlock+explained) — the bug the race test found (problem 5.17)
+- [ ] [retry exponential backoff](https://www.youtube.com/results?search_query=retry+with+exponential+backoff+and+jitter) — why retries wait longer each time, and why add randomness
+- [ ] [java concurrency executorservice cyclicbarrier](https://www.youtube.com/results?search_query=java+concurrency+executorservice+cyclicbarrier) — how the two-thread test releases both threads together
+- [ ] [idempotency in rest apis](https://www.youtube.com/results?search_query=idempotency+in+rest+apis) — why cancelling twice isn't an error
 
 ### Phase 4 — Auditing, logging, scheduling
 - [ ] [hibernate envers tutorial](https://www.youtube.com/results?search_query=hibernate+envers+tutorial) — audit tables and revisions
@@ -423,3 +517,7 @@ Run these from `C:\dev\rentalhub`.
 | See what's using a port | `Get-NetTCPConnection -LocalPort 8080 -State Listen` |
 | Git history | `git log --oneline` |
 | Push to GitHub | `git push` |
+| Book a stay as user 2 | `curl.exe -s -i -X POST http://localhost:8081/api/bookings -H "Content-Type: application/json" -H "X-Demo-User-Id: 2" --data "@samples/api/booking.json"` |
+| Every booking in the database | `docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT id, property_id, guest_id, check_in, check_out, status, total_amount FROM bookings ORDER BY id;"` |
+| Who is waiting for a lock (inside psql) | `SELECT pid, wait_event_type, wait_event, query FROM pg_stat_activity WHERE wait_event_type = 'Lock';` |
+| Run only the concurrency tests | `.\mvnw.cmd test "-Dtest=BookingConcurrencyTest"` |

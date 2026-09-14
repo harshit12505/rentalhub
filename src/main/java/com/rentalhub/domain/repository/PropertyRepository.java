@@ -1,11 +1,13 @@
 package com.rentalhub.domain.repository;
 
 import com.rentalhub.domain.model.Property;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -21,6 +23,20 @@ public interface PropertyRepository extends JpaRepository<Property, Long>, JpaSp
      */
     @EntityGraph(attributePaths = {"host", "images"})
     Optional<Property> findWithDetailsById(Long id);
+
+    /**
+     * Loads a listing in order to book it.
+     *
+     * OPTIMISTIC_FORCE_INCREMENT makes Hibernate raise the listing's version as the
+     * booking's transaction commits ({@code UPDATE properties SET version = v + 1 WHERE
+     * id = ? AND version = v}), although nothing on the listing itself changed. If another
+     * transaction raised it first (another booking, or the host saving an edit), that
+     * UPDATE matches no row and the commit fails with an optimistic-locking error. So the
+     * bookings and edits of one listing take turns, and nothing is locked while a booking
+     * is being checked.
+     */
+    @Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)
+    Optional<Property> findForBookingById(Long id);
 
     List<Property> findByHostId(Long hostId);
 
