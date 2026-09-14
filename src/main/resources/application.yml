@@ -73,3 +73,15 @@ rentalhub:
     listing-local-max-size: 10000
     listing-shared-ttl: 10m
     search-ttl: 5m
+  # Booking rules and retry tuning; see BookingSettings.
+  booking:
+    # Longest stay a single booking may cover.
+    max-nights: 90
+    # A booking that loses a race for its listing is retried: at most 3 more attempts,
+    # waiting about 50 ms, then 100, then 200 (never over 500), each shifted by up to 25 ms.
+    retry:
+      max-retries: 3
+      delay: 50ms
+      multiplier: 2
+      jitter: 25ms
+      max-delay: 500ms

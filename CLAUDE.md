@@ -30,8 +30,11 @@ Spring Data Redis 4.1 on Lettuce 7.5, Caffeine 3.2, Jackson 3.1 (Redis JSON via
 `org.springframework.boot.webmvc.test.autoconfigure` (test starter `spring-boot-starter-webmvc-test`).
 With Lettuce, Spring Data Redis cache writes/clears are asynchronous unless `immediateWrites()`.
 Boot 4 specifics: `spring-boot-starter-webmvc` (not `-web`), `spring-boot-starter-flyway`
-is required, Jackson 3 (`tools.jackson`), Spring Retry is NOT managed — use Spring
-Framework 7's built-in `@Retryable` (`org.springframework.resilience.annotation`).
+is required, Jackson 3 (`tools.jackson`), Spring Retry is NOT managed — Spring
+Framework 7 has its own retry: `RetryTemplate`/`RetryPolicy` (`org.springframework.core.retry`,
+used for bookings, see `RetryConfig`) and `@Retryable` (`org.springframework.resilience.annotation`).
+There is no `@Recover`: recover with a try/catch around `RetryTemplate.invoke()`, which
+rethrows the last failure. `RetryPolicy` needs a positive `maxDelay`.
 
 ## Hard constraints
 - ONE deployable Spring Boot container. No Python, LangChain, Node, npm, package.json,
@@ -56,8 +59,10 @@ Framework 7's built-in `@Retryable` (`org.springframework.resilience.annotation`
 - Flyway owns the schema; `ddl-auto: validate`. Never edit a committed migration — add
   `V{n+1}__description.sql`. Spring AI vector-store schema init is OFF; Flyway creates it.
 - Exceptions carry i18n message keys + args, never English sentences. User-facing
-  exceptions extend `LocalizedException` (a `MessageSourceResolvable`);
-  `GlobalExceptionHandler` resolves them into RFC 9457 ProblemDetail for REST only.
+  exceptions extend `LocalizedException` (a `MessageSourceResolvable`); a broken business
+  rule is an `InvalidRequestException` (400, optional `field`; `PropertyValidationException`
+  extends it). `GlobalExceptionHandler` resolves them into RFC 9457 ProblemDetail for REST
+  only, and maps any `ConcurrencyFailureException` to 409 `error.concurrentUpdate`.
   Every new key goes into messages.properties, _hi and _es with a real translation.
   Messages with `{0}` arguments go through MessageFormat: write apostrophes as `''`
   (better: avoid them). Bean-validation messages use `{key}` and `{max}`-style params.
@@ -69,12 +74,17 @@ Framework 7's built-in `@Retryable` (`org.springframework.resilience.annotation`
   `rentalhub.cache.key-prefix` (`rentalhub:v1:` → `v2`).
 - Every listing write goes through `PropertyService`, which publishes `PropertyChangedEvent`;
   `PropertyCacheInvalidator` evicts after commit. Production code never changes listings
-  via the repository directly (tests may, to bypass the caches on purpose).
+  via the repository directly (tests may, to bypass the caches on purpose). The one
+  exception is the version bump every booking makes (`OPTIMISTIC_FORCE_INCREMENT`):
+  `BookingAttempt` publishes `ListingBookedEvent`, which evicts only that listing's entry.
 - Removal after a change uses the *immediate* cache methods (`evictIfPresent`, `invalidate`,
   the Redis writer's `invalidate`), never `evict`/`clear`, which may be deferred.
-- REST: the acting user is the `X-Demo-User-Id` header until phase 8's session switcher.
-  Controllers are thin; rules live in services.
-- Retry wraps the transaction from the outside: each attempt is a fresh transaction.
+- REST: the acting user is the `X-Demo-User-Id` header (`ApiHeaders.DEMO_USER_ID`) until
+  phase 8's session switcher. Controllers are thin; rules live in services.
+- Retry wraps the transaction from the outside: each attempt is a fresh transaction, in a
+  separate bean (a call to `this` skips the `@Transactional` proxy). Retry only
+  `ConcurrencyFailureException` (lost version race, deadlock victim), never business refusals.
+- "Today" comes from the `Clock` bean (`ClockConfig`), never `LocalDate.now()` in production code.
 - No external calls (Stripe, S3, Gemini, FX API) inside a DB transaction.
 - No secrets in the repo: `${ENV_VAR:local-default}` in YAML; `.env` is git-ignored.
   Database env vars: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`.
@@ -90,8 +100,8 @@ Framework 7's built-in `@Retryable` (`org.springframework.resilience.annotation`
 
 ## Package layout (base `com.rentalhub`)
 ```
-config/        CacheConfig, WebConfig, OpenApiConfig, RetryConfig, SchedulingConfig,
-               EnversConfig, S3Config, StripeConfig, AiConfig
+config/        CacheConfig, ClockConfig, RetryConfig, WebConfig, OpenApiConfig,
+               SchedulingConfig, EnversConfig, S3Config, StripeConfig, AiConfig
 domain/model/  Property (abstract, SINGLE_TABLE) + Apartment/Villa/Cabin/Studio, User,
                Booking, Review, Favorite, PropertyImage; enums/ PropertyType,
                BookingStatus, Currency, UserRole
@@ -100,8 +110,9 @@ factory/       PropertyCreator, AbstractPropertyCreator (template method), Prope
                AttributeSpec, AttributeKind, TypeAttributes; impl/ one creator per type
 cache/         TwoLevelCache, PropertyCacheInvalidator, SearchCacheKeys(+KeyGenerator),
                CacheNames, CacheSettings (wired in config/CacheConfig)
-service/       PropertyService, SearchService, BookingService, ReviewService,
-               PaymentService, CurrencyService, ImageStorageService, DemoUserService
+service/       PropertyService, SearchService, BookingService (+ BookingAttempt, BookingRules,
+               BookingSettings, OverlapConstraint), ReviewService, PaymentService,
+               CurrencyService, ImageStorageService, DemoUserService
 ai/            AiAvailability, ListingEmbeddingService, PreferenceProfileService,
                HybridRetriever, RecommendationService, StatsService
 web/rest, web/graphql, web/mvc   controllers
@@ -133,7 +144,7 @@ One phase at a time, in order. Never scaffold a later phase early. After each ph
 |---|-------|--------|
 | 1 | Foundation: pom, wrapper, compose, config, V1 schema, domain, factory, tests | done |
 | 2 | Caching: Caffeine + Redis two-tier, invalidation (+ listings REST API) | done |
-| 3 | Bookings: transactions, optimistic locking, retry, concurrency test | — |
+| 3 | Bookings: transactions, optimistic locking, retry, concurrency test | done |
 | 4 | Auditing & scheduling: Envers, structured logs, @Scheduled job | — |
 | 5 | Payments: Stripe, BigDecimal math, multi-currency display | — |
 | 6 | AI / RAG: embeddings, preference profile, hybrid search, stats mode | — |
@@ -173,5 +184,12 @@ docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"   # cac
 - 2026-09-13 — Factory update path; PUT = full replacement; type immutable; `CreatePropertyRequest` → `PropertyRequest`.
 - 2026-09-13 — Deleting a listing with bookings → 409 — bookings are history/payment records.
 - Open: /actuator/health goes DOWN when Redis is down (app still works) — decide in phase 9.
-- Open: concurrent PUTs on one listing → optimistic-lock failure currently a 500 — handle in phase 3.
+- 2026-09-14 — Bookings read the listing with OPTIMISTIC_FORCE_INCREMENT — bookings/edits of one listing take turns; a booking never commits a stale price; cost: one cache eviction per booking.
+- 2026-09-14 — Framework 7 RetryTemplate + try/catch recover, not @Retryable/@Recover — no @Recover in Framework 7; nesting explicit; unit-testable.
+- 2026-09-14 — Retry ConcurrencyFailureException (version race + deadlock) — the race test hit a real 40P01: overlapping inserts deadlock inside the exclusion constraint.
+- 2026-09-14 — Overlap-constraint violation → 409 booking.dates.justTaken, not retried — a retry could only answer the same.
+- 2026-09-14 — Bookings CONFIRMED immediately until phase 5 — no payment step yet.
+- 2026-09-14 — Booking rules: ≤ 90 nights (config), guests ≤ max, check-out ≤ availableUntil, not own listing, any role may book; cancel is an idempotent POST action until check-in day.
+- 2026-09-14 — Any ConcurrencyFailureException reaching REST → 409 error.concurrentUpdate — closed the phase 2 open item on concurrent PUTs.
+- Open: a host deleting a listing at the instant it is booked → the guest may get a 500 (FK violation) — map to 404 if it matters.
 - Open: maxPrice filter ignores currency — fix in phase 5.

@@ -4,9 +4,11 @@ import com.rentalhub.domain.model.User;
 import com.rentalhub.domain.model.enums.Currency;
 import com.rentalhub.domain.model.enums.PropertyType;
 import com.rentalhub.domain.model.enums.UserRole;
+import com.rentalhub.dto.BookingRequest;
 import com.rentalhub.dto.PropertyRequest;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 /** Valid-by-default test data. Each test breaks only the one thing it is testing. */
@@ -21,6 +23,19 @@ public final class TestRequests {
 
     public static User guest() {
         return new User("Ravi Kumar", "ravi@example.com", UserRole.GUEST);
+    }
+
+    public static User secondGuest() {
+        return new User("Meera Iyer", "meera@example.com", UserRole.GUEST);
+    }
+
+    public static BookingRequest booking(long propertyId, LocalDate checkIn, LocalDate checkOut, int guests) {
+        BookingRequest request = new BookingRequest();
+        request.setPropertyId(propertyId);
+        request.setCheckIn(checkIn);
+        request.setCheckOut(checkOut);
+        request.setGuests(guests);
+        return request;
     }
 
     /** Shared fields that satisfy every type's rules on their own. */

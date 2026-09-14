@@ -19,10 +19,11 @@ One deployable Spring Boot application. No separate frontend build, no npm, no s
 |---|---|---|
 | 1 | Foundation: build, schema, domain model, Factory pattern, tests | ✅ |
 | 2 | Caching: Caffeine + Redis two-tier cache, after-commit invalidation, listings REST API | ✅ |
-| 3–9 | Bookings, auditing, payments, AI/RAG, extras, frontend, deploy | not started |
+| 3 | Bookings: transactions, optimistic locking, retry and recover, concurrency tests | ✅ |
+| 4–9 | Auditing, payments, AI/RAG, extras, frontend, deploy | not started |
 
-The app has a REST API for listings (see [Trying the API](#trying-the-api-powershell)) and no
-web pages yet. The startup warning `Cannot find template location: classpath:/templates/` is
+The app has a REST API for listings and bookings (see
+[Trying the API](#trying-the-api-powershell)) and no web pages yet. The startup warning `Cannot find template location: classpath:/templates/` is
 expected until pages arrive in phase 8.
 
 ---
@@ -103,6 +104,11 @@ docker compose up -d
 | `POST` | `/api/properties` | a host | Create a listing |
 | `PUT` | `/api/properties/{id}` | that listing's host | Replace a listing (full new state) |
 | `DELETE` | `/api/properties/{id}` | that listing's host | Delete a listing (409 if it has bookings) |
+| `POST` | `/api/bookings` | any user | Book a stay (not at your own listing). Safe against double booking |
+| `GET` | `/api/bookings` | any user | Your own trips, latest first |
+| `GET` | `/api/bookings/{id}` | its guest or the listing's host | One booking |
+| `POST` | `/api/bookings/{id}/cancel` | its guest or the listing's host | Cancel, until check-in day. Frees the dates |
+| `GET` | `/api/properties/{id}/bookings` | that listing's host | Every booking of the listing |
 
 There is no login: the acting user is sent in an `X-Demo-User-Id` header. There is no demo
 data until phase 9, so first create a host by hand (note the `id` it prints):
@@ -138,6 +144,23 @@ See what is cached in Redis (the app log also prints `cache.miss` whenever the d
 ```powershell
 docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"
 ```
+
+Now book the villa as a guest. Create one (note the `id`, 2 on a fresh database):
+
+```powershell
+docker exec -it rentalhub-postgres psql -U rentalhub -d rentalhub -c "INSERT INTO users (full_name, email, role) VALUES ('Ravi Kumar', 'ravi@example.com', 'GUEST') RETURNING id;"
+```
+
+```powershell
+$stay = @{ propertyId = 1; checkIn = "2027-03-10"; checkOut = "2027-03-13"; guests = 2 } | ConvertTo-Json
+```
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:8081/api/bookings -Headers @{ "X-Demo-User-Id" = "2" } -ContentType "application/json" -Body $stay
+```
+
+The booking comes back `CONFIRMED`: 3 nights, `totalAmount` 36000.00 INR. Send the same request
+again and you get a 409, because those dates are now taken.
 
 ---
 
