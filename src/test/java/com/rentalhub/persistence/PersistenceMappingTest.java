@@ -12,6 +12,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationInfo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,8 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Boots the whole application against a real Postgres. Simply starting proves the
- * two things no unit test can: Flyway's V1 runs cleanly, and Hibernate's
- * ddl-auto=validate agrees that every entity matches its table.
+ * two things no unit test can: every Flyway migration runs cleanly, and Hibernate's
+ * ddl-auto=validate agrees that every entity (and every Envers history table) matches.
  *
  * {@code @Transactional} rolls every test back, so tests never see each other's rows.
  */
@@ -57,9 +58,11 @@ class PersistenceMappingTest extends IntegrationTest {
     private Validator validator;
 
     @Test
-    @DisplayName("Flyway applied V1 and Hibernate validated the schema against the entities")
+    @DisplayName("Flyway applied every migration, none is pending, and Hibernate validated the schema")
     void schemaIsMigratedAndValid() {
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1");
+        MigrationInfo[] all = flyway.info().all();
+        assertThat(flyway.info().pending()).as("migrations not yet applied").isEmpty();
+        assertThat(flyway.info().current().getVersion()).isEqualTo(all[all.length - 1].getVersion());
     }
 
     @Test

@@ -49,3 +49,18 @@ read this after March 2027, move them into the future.
 | `booking-price-race.json` | apartment, 10–13 Jun, for the staged retry | 201 at the new price |
 | `booking-constraint-race.json` | apartment, 10–13 Jul, for the staged constraint race | 409 `booking.dates.justTaken` |
 | `booking-rollback-race.json` | apartment, 10–13 Sep, for the same race ending in ROLLBACK | 201 |
+
+## Reviews (`/api/properties/{id}/reviews`, `/api/reviews/{id}`)
+
+```powershell
+curl.exe -s -i -X POST http://localhost:8081/api/properties/2/reviews -H "Content-Type: application/json" -H "X-Demo-User-Id: 2" --data "@samples/api/review.json"
+```
+
+Only a guest whose stay at the listing has ended may review it, once. The hands-on guide
+creates such a stay with SQL, because the booking API refuses past dates.
+
+| File | What it is | Expected |
+|---|---|---|
+| `review.json` | 5 stars and a comment | 201 after a stay; 403 `review.notStayed` before; 409 `review.alreadyReviewed` the second time |
+| `review-edit.json` | 4 stars, a changed comment (for PUT `/api/reviews/{id}`) | 200 for the author; 403 `review.notAuthor` for anyone else |
+| `review-bad-rating.json` | 6 stars | 400 with an `errors` list |

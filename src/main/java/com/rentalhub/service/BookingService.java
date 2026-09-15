@@ -90,13 +90,26 @@ public class BookingService {
             }
             // Our check found the dates free, yet the database refused the row: a booking
             // for them was inserted by someone else in the moment between.
-            log.info("booking.race.lost propertyId={} guestId={} checkIn={} checkOut={} reason=overlap-constraint",
-                    request.getPropertyId(), guestId, request.getCheckIn(), request.getCheckOut());
+            log.atInfo().setMessage("booking.race.lost")
+                    .addKeyValue("propertyId", request.getPropertyId())
+                    .addKeyValue("guestId", guestId)
+                    .addKeyValue("checkIn", request.getCheckIn())
+                    .addKeyValue("checkOut", request.getCheckOut())
+                    .addKeyValue("reason", "overlap-constraint")
+                    .log();
             throw new ConflictException("booking.dates.justTaken");
         }
-        log.info("booking.created bookingId={} propertyId={} guestId={} checkIn={} checkOut={} total={} currency={}",
-                booking.id(), booking.property().id(), guestId, booking.checkIn(), booking.checkOut(),
-                booking.totalAmount(), booking.currency());
+        // An event name plus key/value pairs: "booking.created bookingId=1 ..." locally,
+        // separate JSON fields in the render profile's logs.
+        log.atInfo().setMessage("booking.created")
+                .addKeyValue("bookingId", booking.id())
+                .addKeyValue("propertyId", booking.property().id())
+                .addKeyValue("guestId", guestId)
+                .addKeyValue("checkIn", booking.checkIn())
+                .addKeyValue("checkOut", booking.checkOut())
+                .addKeyValue("total", booking.totalAmount())
+                .addKeyValue("currency", booking.currency())
+                .log();
         return booking;
     }
 
@@ -105,9 +118,13 @@ public class BookingService {
      * it right now. Give up with an answer the guest can act on.
      */
     private ConflictException recover(BookingRequest request, long guestId, ConcurrencyFailureException last) {
-        log.warn("booking.retry.exhausted propertyId={} guestId={} checkIn={} checkOut={} lastCause={}",
-                request.getPropertyId(), guestId, request.getCheckIn(), request.getCheckOut(),
-                last.getClass().getSimpleName());
+        log.atWarn().setMessage("booking.retry.exhausted")
+                .addKeyValue("propertyId", request.getPropertyId())
+                .addKeyValue("guestId", guestId)
+                .addKeyValue("checkIn", request.getCheckIn())
+                .addKeyValue("checkOut", request.getCheckOut())
+                .addKeyValue("lastCause", last.getClass().getSimpleName())
+                .log();
         return new ConflictException("booking.dates.justTaken");
     }
 
@@ -155,8 +172,11 @@ public class BookingService {
         // Write now, so a clash with a simultaneous change to this booking (its own version
         // check) surfaces here and becomes a 409, rather than at commit.
         bookings.flush();
-        log.info("booking.cancelled bookingId={} propertyId={} byUserId={}",
-                bookingId, booking.getProperty().getId(), actingUserId);
+        log.atInfo().setMessage("booking.cancelled")
+                .addKeyValue("bookingId", bookingId)
+                .addKeyValue("propertyId", booking.getProperty().getId())
+                .addKeyValue("byUserId", actingUserId)
+                .log();
         return BookingViews.toView(booking);
     }
 

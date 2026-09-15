@@ -20,7 +20,8 @@ One deployable Spring Boot application. No separate frontend build, no npm, no s
 | 1 | Foundation: build, schema, domain model, Factory pattern, tests | ✅ |
 | 2 | Caching: Caffeine + Redis two-tier cache, after-commit invalidation, listings REST API | ✅ |
 | 3 | Bookings: transactions, optimistic locking, retry and recover, concurrency tests | ✅ |
-| 4–9 | Auditing, payments, AI/RAG, extras, frontend, deploy | not started |
+| 4 | Auditing (Envers) with listing history, structured logging, nightly stale-listing job, reviews | ✅ |
+| 5–9 | Payments, AI/RAG, extras, frontend, deploy | not started |
 
 The app has a REST API for listings and bookings (see
 [Trying the API](#trying-the-api-powershell)) and no web pages yet. The startup warning `Cannot find template location: classpath:/templates/` is
@@ -109,6 +110,15 @@ docker compose up -d
 | `GET` | `/api/bookings/{id}` | its guest or the listing's host | One booking |
 | `POST` | `/api/bookings/{id}/cancel` | its guest or the listing's host | Cancel, until check-in day. Frees the dates |
 | `GET` | `/api/properties/{id}/bookings` | that listing's host | Every booking of the listing |
+| `GET` | `/api/properties/{id}/history` | that listing's host | Every change to the listing: when, by whom, what changed (still readable after deletion) |
+| `POST` | `/api/properties/{id}/reviews` | a guest whose stay there has ended | Review the listing (once) |
+| `GET` | `/api/properties/{id}/reviews` | anyone | The listing's reviews, newest first |
+| `GET` | `/api/reviews/{id}` | anyone | One review |
+| `PUT` | `/api/reviews/{id}` | its author | Replace the rating and comment |
+| `DELETE` | `/api/reviews/{id}` | its author | Delete the review (its history is kept) |
+
+Every response carries an `X-Request-Id` header. The same id appears on every log line
+written while handling that request, so a problem report can be matched to the logs.
 
 There is no login: the acting user is sent in an `X-Demo-User-Id` header. There is no demo
 data until phase 9, so first create a host by hand (note the `id` it prints):

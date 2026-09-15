@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -50,6 +52,11 @@ public interface PropertyRepository extends JpaRepository<Property, Long>, JpaSp
         return findAll(PropertySpecifications.search(city, minGuests, maxPrice), pageable);
     }
 
-    /** Feeds the scheduled job that retires expired listings. */
-    List<Property> findByActiveTrueAndAvailableUntilBefore(LocalDate date);
+    /**
+     * Listings still on the market whose last available day is before {@code date}: the
+     * work list of StaleListingJob. Ids only, because the job changes each listing
+     * through PropertyService, in a transaction of its own.
+     */
+    @Query("SELECT p.id FROM Property p WHERE p.active = true AND p.availableUntil < :date ORDER BY p.id")
+    List<Long> findActiveIdsAvailableUntilBefore(@Param("date") LocalDate date);
 }

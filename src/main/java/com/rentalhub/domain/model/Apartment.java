@@ -6,12 +6,14 @@ import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.envers.Audited;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Entity
+@Audited
 @DiscriminatorValue("APARTMENT")
 @Getter
 @Setter

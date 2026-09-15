@@ -49,6 +49,8 @@ rethrows the last failure. `RetryPolicy` needs a positive `maxDelay`.
   so forms/views/GraphQL render them generically.
 - Adding a property type = enum value + entity + creator + migration + translated
   labels. Nothing else. `PropertyFactoryTest` enforces entity/creator/label agreement.
+  The entity carries `@Audited`, and the migration adds its columns to `properties_aud`
+  as well as `properties` (the test checks the annotation; startup validation the columns).
 
 ## Conventions
 - Money: `BigDecimal` in Java, `NUMERIC(19,4)` in SQL. `double`/`float` banned for money,
@@ -85,6 +87,20 @@ rethrows the last failure. `RetryPolicy` needs a positive `maxDelay`.
   separate bean (a call to `this` skips the `@Transactional` proxy). Retry only
   `ConcurrencyFailureException` (lost version race, deadlock victim), never business refusals.
 - "Today" comes from the `Clock` bean (`ClockConfig`), never `LocalDate.now()` in production code.
+- Auditing: Envers `@Audited` on Property (and every subtype), Booking and Review. Flyway
+  creates the history tables (`*_aud`, `revinfo`); a new audited column needs it in the
+  `_aud` table too. `revinfo.changed_by` comes from `AuditActor`: set per request by
+  `RequestIdFilter`, by jobs with `try (var s = AuditActor.as(AuditActor.system(...)))`.
+  Envers sees only changes made through Hibernate entities: plain SQL and bulk JPQL
+  updates leave no history, so production code changes data through the services.
+- Logging: an event name plus key/value pairs with SLF4J's fluent API
+  (`log.atInfo().setMessage("booking.created").addKeyValue("bookingId", id).log()`), never
+  values glued into the message. The MDC carries `requestId` and `userId` (web requests)
+  or `job` (scheduled work). Locally the console prints `key=value` (`%kvp{NONE}`); the
+  render profile logs ECS JSON.
+- Scheduled jobs live in `scheduling/`, take their cron from config (`"-"` disables it; the
+  integration tests disable every job), change data through services one item per
+  transaction, and expose a public method that tests call directly.
 - No external calls (Stripe, S3, Gemini, FX API) inside a DB transaction.
 - No secrets in the repo: `${ENV_VAR:local-default}` in YAML; `.env` is git-ignored.
   Database env vars: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`.
@@ -100,8 +116,9 @@ rethrows the last failure. `RetryPolicy` needs a positive `maxDelay`.
 
 ## Package layout (base `com.rentalhub`)
 ```
-config/        CacheConfig, ClockConfig, RetryConfig, WebConfig, OpenApiConfig,
-               SchedulingConfig, EnversConfig, S3Config, StripeConfig, AiConfig
+config/        CacheConfig, ClockConfig, RetryConfig, SchedulingConfig, WebConfig,
+               OpenApiConfig, S3Config, StripeConfig, AiConfig (Envers is set in application.yml)
+audit/         AuditActor (who is acting, per thread), Revision (revinfo), ActorRevisionListener
 domain/model/  Property (abstract, SINGLE_TABLE) + Apartment/Villa/Cabin/Studio, User,
                Booking, Review, Favorite, PropertyImage; enums/ PropertyType,
                BookingStatus, Currency, UserRole
@@ -110,12 +127,14 @@ factory/       PropertyCreator, AbstractPropertyCreator (template method), Prope
                AttributeSpec, AttributeKind, TypeAttributes; impl/ one creator per type
 cache/         TwoLevelCache, PropertyCacheInvalidator, SearchCacheKeys(+KeyGenerator),
                CacheNames, CacheSettings (wired in config/CacheConfig)
-service/       PropertyService, SearchService, BookingService (+ BookingAttempt, BookingRules,
-               BookingSettings, OverlapConstraint), ReviewService, PaymentService,
-               CurrencyService, ImageStorageService, DemoUserService
+service/       PropertyService, SearchService, ListingHistoryService, BookingService
+               (+ BookingAttempt, BookingRules, BookingSettings, OverlapConstraint),
+               ReviewService, ConstraintViolations, PaymentService, CurrencyService,
+               ImageStorageService, DemoUserService
 ai/            AiAvailability, ListingEmbeddingService, PreferenceProfileService,
                HybridRetriever, RecommendationService, StatsService
-web/rest, web/graphql, web/mvc   controllers
+web/           RequestIdFilter (request id + user in the MDC, audit actor);
+               rest/, graphql/, mvc/ controllers
 dto/, exception/, scheduling/ (StaleListingJob), bootstrap/ (DemoDataSeeder)
 resources/     application.yml (+ -local, -render), db/migration/, messages*.properties,
                graphql/schema.graphqls, templates/, static/css/app.css
@@ -147,7 +166,7 @@ One phase at a time, in order. Never scaffold a later phase early. After each ph
 | 1 | Foundation: pom, wrapper, compose, config, V1 schema, domain, factory, tests | done |
 | 2 | Caching: Caffeine + Redis two-tier, invalidation (+ listings REST API) | done |
 | 3 | Bookings: transactions, optimistic locking, retry, concurrency test | done |
-| 4 | Auditing & scheduling: Envers, structured logs, @Scheduled job | — |
+| 4 | Auditing & scheduling: Envers, structured logs, @Scheduled job | done |
 | 5 | Payments: Stripe, BigDecimal math, multi-currency display | — |
 | 6 | AI / RAG: embeddings, preference profile, hybrid search, stats mode | — |
 | 7 | Extra mile: S3, i18n, GraphQL, OpenAPI, Postman | — |
@@ -194,4 +213,11 @@ docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"   # cac
 - 2026-09-14 — Booking rules: ≤ 90 nights (config), guests ≤ max, check-out ≤ availableUntil, not own listing, any role may book; cancel is an idempotent POST action until check-in day.
 - 2026-09-14 — Any ConcurrencyFailureException reaching REST → 409 error.concurrentUpdate — closed the phase 2 open item on concurrent PUTs.
 - Open: a host deleting a listing at the instant it is booked → the guest may get a 500 (FK violation) — map to 404 if it matters.
+- 2026-09-15 — Custom Envers revision entity with `changed_by` (AuditActor ThreadLocal, set by RequestIdFilter and jobs) — "who" is the first question a history answers; the listener isn't a Spring bean, and runs on the transaction's thread.
+- 2026-09-15 — Not audited: listing images (phase 7), `version` (Envers default), `updatedAt` (revision has the time); user relations store the id only — keeps history meaningful and lean.
+- 2026-09-15 — V2 audit DDL taken from Hibernate's own generated schema; history tables permissive (no NOT NULL/CHECK/FK to live tables) — validation must pass; history outlives rows.
+- 2026-09-15 — Listing history = diff of consecutive Envers snapshots, host only, readable after deletion (store_data_at_delete) — readers want what changed, not whole rows.
+- 2026-09-15 — Reviews API added in phase 4 (spec audits and logs reviews; nothing created them): only guests whose confirmed stay has ended; one per guest per listing (check + unique constraint).
+- 2026-09-15 — Structured logging via SLF4J fluent key/value pairs + MDC; local `%kvp{NONE}` (same look as before), ECS JSON in the render profile; all event logs converted, not only bookings/reviews — one style.
+- 2026-09-15 — StaleListingJob: 03:15 UTC daily (env-overridable, "-" disables), one transaction per listing via PropertyService, no distributed lock (single instance; ShedLock documented).
 - Open: maxPrice filter ignores currency — fix in phase 5.

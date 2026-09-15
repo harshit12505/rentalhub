@@ -28,6 +28,17 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+      # Hibernate Envers (auditing). The history tables are created by Flyway (V2).
+      org:
+        hibernate:
+          envers:
+            # Lower-case names, the way Postgres stores them: properties_aud, not properties_AUD.
+            audit_table_suffix: _aud
+            revision_field_name: rev
+            revision_type_field_name: revtype
+            # A deleted row's last state is kept in its DEL history row, so the history
+            # of a deleted listing still says what it was and whose it was.
+            store_data_at_delete: true
 
   flyway:
     locations: classpath:db/migration
@@ -55,6 +66,15 @@ spring:
 server:
   # Render assigns the port through the PORT environment variable.
   port: ${PORT:8080}
+
+logging:
+  pattern:
+    # Spring Boot's console layout, trimmed, plus two things:
+    #   %X{requestId}  the request's id from the MDC (blank outside a web request);
+    #   %kvp{NONE}     the event's key/value pairs after the message, as key=value.
+    # So a line reads "booking.created bookingId=1 propertyId=2 ...". The render profile
+    # switches to JSON instead (application-render.yml), where each pair is its own field.
+    console: "%clr(%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}){faint} %clr(%5p) %clr([%15.15t]){faint} %clr(%-8X{requestId}){magenta} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m %kvp{NONE}%n%wEx"
 
 management:
   endpoints:
@@ -85,3 +105,10 @@ rentalhub:
       multiplier: 2
       jitter: 25ms
       max-delay: 500ms
+  # Background jobs; see scheduling/StaleListingJob.
+  jobs:
+    stale-listings:
+      # Spring cron: second minute hour day-of-month month day-of-week.
+      # Daily at 03:15. Set to "-" to switch the job off.
+      cron: "${STALE_LISTINGS_CRON:0 15 3 * * *}"
+      zone: "${STALE_LISTINGS_ZONE:UTC}"

@@ -52,10 +52,16 @@ class PropertyCacheInvalidator {
             for (String pattern : partitions) {
                 flush(searchPages, pattern);
             }
-            log.info("cache.invalidated propertyId={} searchPartitions={}", event.propertyId(), partitions);
+            log.atInfo().setMessage("cache.invalidated")
+                    .addKeyValue("propertyId", event.propertyId())
+                    .addKeyValue("searchPartitions", partitions)
+                    .log();
         } catch (RuntimeException e) {
-            log.warn("cache.invalidation.failed propertyId={} searchPartitions={} error=\"{}\"",
-                    event.propertyId(), partitions, e.getMessage());
+            log.atWarn().setMessage("cache.invalidation.failed")
+                    .addKeyValue("propertyId", event.propertyId())
+                    .addKeyValue("searchPartitions", partitions)
+                    .addKeyValue("error", e.getMessage())
+                    .log();
         }
     }
 
@@ -68,10 +74,16 @@ class PropertyCacheInvalidator {
     public void onListingBooked(ListingBookedEvent event) {
         try {
             requiredCache(CacheNames.PROPERTY_BY_ID).evictIfPresent(event.propertyId());
-            log.debug("cache.invalidated propertyId={} reason=booking", event.propertyId());
+            log.atDebug().setMessage("cache.invalidated")
+                    .addKeyValue("propertyId", event.propertyId())
+                    .addKeyValue("reason", "booking")
+                    .log();
         } catch (RuntimeException e) {
-            log.warn("cache.invalidation.failed propertyId={} reason=booking error=\"{}\"",
-                    event.propertyId(), e.getMessage());
+            log.atWarn().setMessage("cache.invalidation.failed")
+                    .addKeyValue("propertyId", event.propertyId())
+                    .addKeyValue("reason", "booking")
+                    .addKeyValue("error", e.getMessage())
+                    .log();
         }
     }
 

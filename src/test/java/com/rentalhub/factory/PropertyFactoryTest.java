@@ -11,6 +11,7 @@ import com.rentalhub.factory.impl.ApartmentCreator;
 import com.rentalhub.factory.impl.VillaCreator;
 import com.rentalhub.support.TestMessages;
 import com.rentalhub.support.TestRequests;
+import org.hibernate.envers.Audited;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -74,6 +75,13 @@ class PropertyFactoryTest {
         assertThatIllegalStateException()
                 .isThrownBy(() -> new PropertyFactory(withDuplicate))
                 .withMessageContaining("Two PropertyCreators registered for VILLA");
+    }
+
+    @Test
+    @DisplayName("every property entity is audited, so a new type's history is kept too")
+    void everyEntityIsAudited() {
+        assertThat(creators).allSatisfy(creator ->
+                assertThat(creator.entityClass()).hasAnnotation(Audited.class));
     }
 
     @Test
