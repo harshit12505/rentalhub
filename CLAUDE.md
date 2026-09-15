@@ -136,7 +136,9 @@ One phase at a time, in order. Never scaffold a later phase early. After each ph
    PowerShell commands + expected output), and add request bodies to `samples/api/`.
    Run every step first against throwaway containers (different names/ports, `--rm`;
    never touch the owner's `rentalhub-*` containers) and write down the real output;
-6. commit `Phase N: <descriptive summary>` (message from a file: `git commit -F <file>`);
+6. commit `Phase N: <descriptive summary>` (message from a file: `git commit -F <file>`).
+   No AI co-author trailer or attribution line in commit messages or PR descriptions
+   (the owner's choice; the history was rewritten on 2026-09-15 to remove them);
 7. STOP and wait for the owner's confirmation.
 
 ## Phases

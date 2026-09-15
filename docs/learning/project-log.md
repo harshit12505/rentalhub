@@ -20,9 +20,9 @@ added at the end of every phase.
 
 | Phase | What | Status | Commit |
 |---|---|---|---|
-| 1 | Foundation | ✅ done | `739c2d0` |
-| 2 | Caching (Caffeine + Redis) + listings REST API | ✅ done | `65f35f4` (+ docs `cf09f86`), PR #1 |
-| 3 | Bookings & concurrency | ✅ done | `Phase 3: …` on branch `phase-3-bookings` (see `git log`) |
+| 1 | Foundation | ✅ done | `29081ff` |
+| 2 | Caching (Caffeine + Redis) + listings REST API | ✅ done | `30f5d45` (+ docs `498df7c`), merged via PR #1 (`0ce70c6`) |
+| 3 | Bookings & concurrency | ✅ done | `6c20a81`, merged via PR #2 (`5305753`) |
 | 4 | Auditing & scheduling | next — waiting for your go-ahead | |
 | 5 | Payments & money | | |
 | 6 | AI / RAG | | |
@@ -35,6 +35,9 @@ Postgres and Redis), all passing. Ten REST endpoints: five for listings and five
 bookings. Double bookings are impossible even under concurrent requests, and the app keeps
 working when Redis is down.
 
+Commit ids changed on 15 Sep 2026, when the history was rewritten (see the log). Older
+notes may still mention the previous ids.
+
 ---
 
 ## 2. Your to-do list
@@ -46,11 +49,8 @@ working when Redis is down.
     error; race two bookings yourself; hold a real database lock in psql to watch a booking
     wait, retry and charge the new price; then watch the database refuse an overlap the app
     couldn't see.
-- [ ] **GitHub.**
-  - PR #1 (Phase 2) is still open. Merge it when you're happy with it.
-  - Phase 3 is committed on the branch `phase-3-bookings`, which is built on top of Phase 2
-    and hasn't been pushed. When you want it on GitHub, say so, and I'll push it and open its
-    PR.
+- [x] **GitHub:** PRs #1 and #2 are merged, the history has been cleaned up, and the old
+      branches are deleted (15 Sep). Nothing left to do.
 
 ### Reading
 - [ ] [03 — Bookings and concurrency](03-bookings.md), and answer its interview questions
@@ -65,6 +65,23 @@ working when Redis is down.
 ---
 
 ## 3. Log
+
+### 15 Sep 2026 — GitHub housekeeping
+
+- **Merged:** you merged PR #1 (Phase 2) and PR #2 (Phase 3) into `main`.
+- **Claude removed from the contributors list.** You asked for it.
+  - Why it was there: every commit message had ended with a `Co-Authored-By: Claude …` line,
+    and GitHub credits co-authors of commits on the default branch.
+  - How it was removed: that line was stripped from every commit message with
+    `git filter-branch --msg-filter`, and `main` was force-pushed.
+  - What changed: only the commit ids (for example, Phase 1 went from `739c2d0` to
+    `29081ff`). The code is byte-for-byte identical.
+  - The merged `phase-2-caching` and `phase-3-bookings` branches were deleted.
+  - One thing couldn't change: the merged PR pages on GitHub still show the old commits,
+    because GitHub doesn't allow a pull request's own history to be rewritten.
+- **From now on,** commits and PR descriptions carry no AI attribution (D37).
+- **Hit along the way:** problem 5.19. The rewrite was undone by accident and brought back
+  from Git's reflog.
 
 ### Session 3 — Phase 3: bookings & concurrency (14 Sep 2026)
 
@@ -127,8 +144,8 @@ working when Redis is down.
 **Verified by hand** against throwaway containers: every step of hands-on Parts 18–26,
 including holding a row lock in psql to watch a booking retry and pay the new price.
 
-**Result:** 131/131 tests passing (80 unit, 51 integration). Branch `phase-3-bookings`,
-built on `phase-2-caching` (PR #1 still open).
+**Result:** 131/131 tests passing (80 unit, 51 integration). Committed as `6c20a81` and
+merged into `main` through PR #2.
 
 ### Session 2 — Phase 2: caching (13 Sep 2026)
 
@@ -253,7 +270,7 @@ built on `phase-2-caching` (PR #1 still open).
   - `docs/learning/` (stack choices, the Phase 1 guide, this log);
   - `.gitattributes` keeps `mvnw` in Unix line endings for the Linux Docker build.
 - **Result:** 52/52 tests passing (42 unit, 10 real-Postgres), the app boots in about
-  10 s, health `UP`. Committed as `739c2d0` (59 files).
+  10 s, health `UP`. Committed as `29081ff` (59 files).
 
 ---
 
@@ -299,6 +316,7 @@ Why each non-obvious choice was made. Interviewers love "why".
 | D34 | Any `ConcurrencyFailureException` reaching the API is a 409 `error.concurrentUpdate` | "the data changed under you, try again", not "the server is broken" |
 | D35 | "Today" comes from an injected `Clock` (the JVM's zone) | rules can be tested with a fixed date; agrees with `@FutureOrPresent` |
 | D36 | `InvalidRequestException` (400 + field) as the base for every rule violation | one handler for listing and booking rules |
+| D37 | No AI co-author or attribution lines in commits or PR descriptions; history rewritten to remove the existing ones (15 Sep) | your choice: the repository's contributors should be you alone |
 
 ---
 
@@ -326,6 +344,7 @@ Each of these is a good "tell me about a problem you solved" story.
 | 5.16 | A GitHub push kept failing with "Repository not found" | the remote had been added with the placeholder `YOUR-USERNAME` | `git remote set-url origin` with the real address |
 | 5.17 | The race test failed on its 2nd run: `CannotAcquireLockException … deadlock detected` (SQLState 40P01) | an exclusion constraint adds its index entry *first* and then checks for conflicts. Two overlapping inserts at the same instant each found the other's uncommitted entry and waited for it, and Postgres cancelled one | retry every `ConcurrencyFailureException` (version race **and** deadlock), not only optimistic failures; the retry sees the survivor and answers correctly. Pinned by `deadlockVictimIsRetried`; the race test has passed repeatedly since |
 | 5.18 | The retry unit tests couldn't build their `RetryTemplate`: `Invalid maxDelay (0ms)` | Framework 7's `RetryPolicy` accepts a zero delay but requires a positive `maxDelay` | the tests use 1 ms |
+| 5.19 | The history rewrite was undone right after it ran | the recovery command (`git reset --hard refs/original/…`), meant only for when a check failed, was listed with a Run button among the steps and got run | `git reflog` still listed the rewritten `main` (`5305753`), so `git reset --hard 5305753` and a force-push restored it. Lesson: Git rarely loses a commit, because the reflog records every position a branch has had |
 
 ---
 
