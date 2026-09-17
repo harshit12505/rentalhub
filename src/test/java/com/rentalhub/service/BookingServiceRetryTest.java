@@ -4,6 +4,7 @@ import com.rentalhub.config.RetryConfig;
 import com.rentalhub.domain.model.Property;
 import com.rentalhub.domain.model.enums.BookingStatus;
 import com.rentalhub.domain.model.enums.Currency;
+import com.rentalhub.domain.model.enums.PaymentStatus;
 import com.rentalhub.domain.repository.BookingRepository;
 import com.rentalhub.domain.repository.PropertyRepository;
 import com.rentalhub.dto.BookingRequest;
@@ -11,6 +12,7 @@ import com.rentalhub.dto.BookingView;
 import com.rentalhub.exception.ConflictException;
 import com.rentalhub.exception.InvalidRequestException;
 import com.rentalhub.support.TestRequests;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.CannotAcquireLockException;
@@ -27,6 +29,8 @@ import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -37,6 +41,10 @@ import static org.mockito.Mockito.when;
  * The retry and recover logic on its own: the transactional attempt is replaced by a
  * mock that fails on cue, and the retry policy is the real one from RetryConfig, with
  * the waits set to zero. BookingConcurrencyTest shows the same paths against Postgres.
+ *
+ * The payment step is a mock too, which hands the held booking straight back: payments
+ * have tests of their own (PaymentServiceTest). What matters here is that it runs once
+ * the dates are held, and never for a booking that was refused.
  */
 class BookingServiceRetryTest {
 
@@ -47,18 +55,26 @@ class BookingServiceRetryTest {
     private final BookingSettings settings = new BookingSettings(90,
             new BookingSettings.Retry(3, Duration.ZERO, 1.0, Duration.ZERO, Duration.ofMillis(1)));
     private final BookingAttempt attempt = mock(BookingAttempt.class);
+    private final PaymentService payments = mock(PaymentService.class);
     private final BookingService service = new BookingService(
             attempt,
             RetryConfig.bookingRetryTemplate(settings.retry()),
             new BookingRules(Clock.fixed(Instant.parse("2026-09-14T12:00:00Z"), ZoneOffset.UTC), settings),
             mock(BookingRepository.class),
-            mock(PropertyRepository.class));
+            mock(PropertyRepository.class),
+            mock(BookingUpdates.class),
+            payments);
 
     private final BookingRequest request = TestRequests.booking(1L, TODAY.plusDays(10), TODAY.plusDays(13), 2);
-    private final BookingView confirmed = new BookingView(99L,
+    private final BookingView held = new BookingView(99L,
             new BookingView.Listing(1L, "Test apartment", "Chennai"), new BookingView.Guest(GUEST, "Ravi Kumar"),
-            request.getCheckIn(), request.getCheckOut(), 3, 2, new BigDecimal("7500.00"), Currency.INR,
-            BookingStatus.CONFIRMED, Instant.EPOCH);
+            request.getCheckIn(), request.getCheckOut(), 3, 2, new BigDecimal("7500.00"), Currency.INR, null,
+            BookingStatus.PENDING, new BookingView.Payment(PaymentStatus.UNPAID, null, null, null), Instant.EPOCH);
+
+    @BeforeEach
+    void paymentHandsTheBookingBack() {
+        when(payments.collect(any(), anyString())).thenAnswer(call -> call.getArgument(0));
+    }
 
     @Test
     @DisplayName("an attempt that loses a version race is run again, and the retry can succeed")
@@ -66,10 +82,11 @@ class BookingServiceRetryTest {
         when(attempt.place(request, GUEST))
                 .thenThrow(lostVersionRace())
                 .thenThrow(lostVersionRace())
-                .thenReturn(confirmed);
+                .thenReturn(held);
 
-        assertThat(service.book(request, GUEST)).isEqualTo(confirmed);
+        assertThat(service.book(request, GUEST)).isEqualTo(held);
         verify(attempt, times(3)).place(request, GUEST);
+        verify(payments, times(1)).collect(held, TestRequests.PAYS);
     }
 
     @Test
@@ -77,9 +94,9 @@ class BookingServiceRetryTest {
     void deadlockVictimIsRetried() {
         when(attempt.place(request, GUEST))
                 .thenThrow(new CannotAcquireLockException("could not execute statement [ERROR: deadlock detected]"))
-                .thenReturn(confirmed);
+                .thenReturn(held);
 
-        assertThat(service.book(request, GUEST)).isEqualTo(confirmed);
+        assertThat(service.book(request, GUEST)).isEqualTo(held);
         verify(attempt, times(2)).place(request, GUEST);
     }
 
@@ -92,6 +109,7 @@ class BookingServiceRetryTest {
                 .isInstanceOfSatisfying(ConflictException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo("booking.dates.justTaken"));
         verify(attempt, times(4)).place(request, GUEST);   // the first attempt and 3 retries
+        verifyNoInteractions(payments);
     }
 
     @Test
@@ -105,6 +123,7 @@ class BookingServiceRetryTest {
                 .isInstanceOfSatisfying(ConflictException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo("booking.dates.justTaken"));
         verify(attempt, times(1)).place(request, GUEST);
+        verifyNoInteractions(payments);
     }
 
     @Test
@@ -127,15 +146,16 @@ class BookingServiceRetryTest {
                 .isInstanceOfSatisfying(ConflictException.class,
                         ex -> assertThat(ex.getMessageKey()).isEqualTo("booking.dates.unavailable"));
         verify(attempt, times(1)).place(request, GUEST);
+        verifyNoInteractions(payments);
     }
 
     @Test
-    @DisplayName("a request the date rules refuse never reaches the database")
+    @DisplayName("a request the date rules refuse never reaches the database, or the payment provider")
     void dateRulesRunFirst() {
         BookingRequest backwards = TestRequests.booking(1L, TODAY.plusDays(13), TODAY.plusDays(10), 2);
 
         assertThatThrownBy(() -> service.book(backwards, GUEST)).isInstanceOf(InvalidRequestException.class);
-        verifyNoInteractions(attempt);
+        verifyNoInteractions(attempt, payments);
     }
 
     private static ObjectOptimisticLockingFailureException lostVersionRace() {

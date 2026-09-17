@@ -92,6 +92,22 @@ with**, and **what it costs you**. Every entry below is in that shape.
 ## Stripe test mode (phase 5)
 - **Why:** the industry-standard payments API, with a free test mode and fake card numbers.
   PaymentIntents model the real-world flow (authorise, confirm, fail) properly.
+- **Library:** Stripe's official `stripe-java` (33.4.2). Spring Boot doesn't manage it, so its
+  version is pinned in `pom.xml`. Each major version speaks one fixed Stripe API version.
+- **Without a key:** a built-in simulator answers to Stripe's test ids, so the app works end
+  to end with no account. That matters here, because
+  [Stripe accounts in India are invite-only](https://support.stripe.com/questions/stripe-accounts-are-invite-only-in-india).
+- **Say:** "Payments go through a small gateway interface with two implementations, Stripe
+  and a simulator, so the booking saga is the same either way. The Stripe one is tested
+  against a fake Stripe server."
+
+## Exchange rates (phase 5)
+- **Why ExchangeRate-API's open endpoint:** free, no key, and daily rates for about 160
+  currencies, AED included. Frankfurter was the other candidate, but it publishes the
+  European Central Bank's rates, and the ECB has no AED rate.
+- **Cost:** rates change once a day, and the terms ask for a credit line and at most about
+  one call an hour. The app keeps them for an hour, and uses them only for display and for
+  comparing prices, never for what is charged.
 
 ## AWS S3 (phase 7)
 - **Why:** the standard for storing user-uploaded files. Keeping images out of the

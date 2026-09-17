@@ -10,6 +10,8 @@ import java.math.BigDecimal;
  * search pages small.
  *
  * @param coverImageUrl the first image by sort order, or null if the listing has none
+ * @param displayPrice  the nightly price in the currency the viewer asked for, or null.
+ *                      Always null in the cache (see PropertyView)
  */
 public record PropertySummary(
         long id,
@@ -22,5 +24,12 @@ public record PropertySummary(
         int maxGuests,
         int bedrooms,
         int bathrooms,
-        String coverImageUrl) {
+        String coverImageUrl,
+        DisplayPrice displayPrice) {
+
+    /** A copy with the price shown in another currency too. */
+    public PropertySummary withDisplayPrice(DisplayPrice displayPrice) {
+        return new PropertySummary(id, type, title, city, country, pricePerNight, currency, maxGuests, bedrooms,
+                bathrooms, coverImageUrl, displayPrice);
+    }
 }

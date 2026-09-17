@@ -16,6 +16,7 @@ import java.time.LocalDate;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.matchesRegex;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -65,7 +66,12 @@ class BookingApiTest extends IntegrationTest {
                 .andExpect(jsonPath("$.totalAmount").value(7500.00))
                 .andExpect(jsonPath("$.currency").value("INR"))
                 .andExpect(jsonPath("$.property.id").value(listingId))
-                .andExpect(jsonPath("$.guest.fullName").value("Ravi Kumar"));
+                .andExpect(jsonPath("$.guest.fullName").value("Ravi Kumar"))
+                // No Stripe key in the tests: the simulator took the (pretend) payment.
+                .andExpect(jsonPath("$.payment.status").value("PAID"))
+                .andExpect(jsonPath("$.payment.provider").value("SIMULATED"))
+                .andExpect(jsonPath("$.payment.reference").value(startsWith("sim_pi_")))
+                .andExpect(jsonPath("$.displayTotal").doesNotExist());
     }
 
     @Test
@@ -75,11 +81,21 @@ class BookingApiTest extends IntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"propertyId\": " + listingId + ", \"guests\": 0}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errors", hasSize(3)))
+                .andExpect(jsonPath("$.errors", hasSize(4)))
                 .andExpect(jsonPath("$.errors[0].field").value("checkIn"))
                 .andExpect(jsonPath("$.errors[1].field").value("checkOut"))
                 .andExpect(jsonPath("$.errors[2].field").value("guests"))
-                .andExpect(jsonPath("$.errors[2].message").value("At least one guest must stay."));
+                .andExpect(jsonPath("$.errors[2].message").value("At least one guest must stay."))
+                .andExpect(jsonPath("$.errors[3].field").value("paymentMethodId"));
+    }
+
+    @Test
+    @DisplayName("a payment method that isn't a payment-method id is refused before anything else happens")
+    void paymentMethodFormat() throws Exception {
+        book(guestId, listingId, checkIn, checkIn.plusDays(3), 2, "4242 4242 4242 4242")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("paymentMethodId"))
+                .andExpect(jsonPath("$.errors[0].message").value("Give a payment method id, such as pm_card_visa."));
     }
 
     @Test
@@ -222,9 +238,14 @@ class BookingApiTest extends IntegrationTest {
 
     private ResultActions book(long userId, long propertyId, LocalDate from, LocalDate to, int guests)
             throws Exception {
+        return book(userId, propertyId, from, to, guests, TestRequests.PAYS);
+    }
+
+    private ResultActions book(long userId, long propertyId, LocalDate from, LocalDate to, int guests,
+                               String paymentMethodId) throws Exception {
         String json = """
-                {"propertyId": %d, "checkIn": "%s", "checkOut": "%s", "guests": %d}
-                """.formatted(propertyId, from, to, guests);
+                {"propertyId": %d, "checkIn": "%s", "checkOut": "%s", "guests": %d, "paymentMethodId": "%s"}
+                """.formatted(propertyId, from, to, guests, paymentMethodId);
         return mvc.perform(post("/api/bookings").header(HEADER, userId)
                 .contentType(MediaType.APPLICATION_JSON).content(json));
     }

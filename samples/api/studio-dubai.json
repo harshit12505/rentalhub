@@ -1,0 +1,13 @@
+{
+  "type": "STUDIO",
+  "title": "Marina studio",
+  "description": "A studio with a sea view, a short walk from the marina.",
+  "city": "Dubai",
+  "country": "United Arab Emirates",
+  "pricePerNight": 300,
+  "currency": "AED",
+  "maxGuests": 2,
+  "bedrooms": 0,
+  "bathrooms": 1,
+  "attributes": { "areaSqm": "32", "hasSofaBed": "true" }
+}

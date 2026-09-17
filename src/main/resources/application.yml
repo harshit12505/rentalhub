@@ -87,8 +87,9 @@ management:
 rentalhub:
   cache:
     # Bump the version when a cached record's shape changes, so new code never
-    # reads old-shaped JSON; old keys simply expire.
-    key-prefix: "rentalhub:v1:"
+    # reads old-shaped JSON; old keys simply expire. v2 (phase 5): listings and search
+    # results gained displayPrice.
+    key-prefix: "rentalhub:v2:"
     listing-local-ttl: 30s
     listing-local-max-size: 10000
     listing-shared-ttl: 10m
@@ -105,10 +106,43 @@ rentalhub:
       multiplier: 2
       jitter: 25ms
       max-delay: 500ms
-  # Background jobs; see scheduling/StaleListingJob.
+  # Payments; see config/StripeConfig and service/PaymentService.
+  payments:
+    stripe:
+      # A Stripe test-mode secret key (sk_test_...). Without one, payments are simulated:
+      # nothing is charged, and bookings say SIMULATED. A live key is refused.
+      secret-key: ${STRIPE_SECRET_KEY:}
+      # Empty means Stripe itself. Set only to point at stripe-mock, Stripe's offline mock.
+      api-base: ${STRIPE_API_BASE:}
+      connect-timeout: 5s
+      read-timeout: 20s
+      # Repeats of a request whose answer was lost, by the Stripe library itself. Safe:
+      # every request carries an idempotency key.
+      max-network-retries: 2
+  # Prices shown in other currencies, and compared across them; see service/CurrencyService.
+  fx:
+    # The currency maxPrice is read in when a search doesn't say.
+    default-currency: INR
+    # ExchangeRate-API's free endpoint: no key, updated daily, asks for at most ~1 call an hour.
+    rates-url: ${FX_RATES_URL:https://open.er-api.com/v6/latest/USD}
+    refresh-after: 1h
+    # Rates older than this are not shown; until then, the last good set covers an outage.
+    max-age: 48h
+    # After a failed fetch, wait this long before trying again.
+    retry-after: 1m
+    connect-timeout: 2s
+    read-timeout: 3s
+  # Background jobs; see scheduling/.
   jobs:
     stale-listings:
       # Spring cron: second minute hour day-of-month month day-of-week.
       # Daily at 03:15. Set to "-" to switch the job off.
       cron: "${STALE_LISTINGS_CRON:0 15 3 * * *}"
       zone: "${STALE_LISTINGS_ZONE:UTC}"
+    payment-reconciliation:
+      # Every 5 minutes. "-" switches it off.
+      cron: "${PAYMENT_RECONCILIATION_CRON:0 */5 * * * *}"
+      # A payment still undecided after this long is looked up at the provider. Far longer
+      # than a live payment can take (Stripe's read timeout times its retries), so the job
+      # never races a payment that is still under way.
+      stale-after: ${PAYMENT_STALE_AFTER:10m}

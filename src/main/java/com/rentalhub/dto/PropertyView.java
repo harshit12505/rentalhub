@@ -22,8 +22,11 @@ import java.util.Map;
  * It is also immutable, and that matters: the in-process cache hands the very same
  * instance to every request that asks for this listing, so nobody may change it.
  *
- * @param attributes the type-specific fields (see Property.typeAttributes()), null meaning "not stated"
- * @param version    the optimistic-locking version the view was built from
+ * @param attributes   the type-specific fields (see Property.typeAttributes()), null meaning "not stated"
+ * @param version      the optimistic-locking version the view was built from
+ * @param displayPrice the nightly price in the currency the viewer asked for, or null. Always
+ *                     null in the cache: it is added per request, to a copy, by
+ *                     CurrencyService, because a converted price is only true for a moment
  */
 public record PropertyView(
         long id,
@@ -44,12 +47,20 @@ public record PropertyView(
         List<Image> images,
         Map<String, Object> attributes,
         long version,
-        Instant updatedAt) {
+        Instant updatedAt,
+        DisplayPrice displayPrice) {
 
     public PropertyView {
         images = List.copyOf(images);
         // Map.copyOf would reject the null values that mean "not stated".
         attributes = Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
+    }
+
+    /** A copy with the price shown in another currency too. The cached original is never changed. */
+    public PropertyView withDisplayPrice(DisplayPrice displayPrice) {
+        return new PropertyView(id, type, title, description, city, country, address, pricePerNight, currency,
+                maxGuests, bedrooms, bathrooms, active, availableUntil, host, images, attributes, version, updatedAt,
+                displayPrice);
     }
 
     public record Host(long id, String fullName) {

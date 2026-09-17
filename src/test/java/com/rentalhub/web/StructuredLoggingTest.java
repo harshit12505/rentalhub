@@ -74,7 +74,8 @@ class StructuredLoggingTest extends IntegrationTest {
                         .header(RequestIdFilter.REQUEST_ID_HEADER, "test-req-42")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"propertyId": %d, "checkIn": "%s", "checkOut": "%s", "guests": 2}
+                                {"propertyId": %d, "checkIn": "%s", "checkOut": "%s", "guests": 2,
+                                 "paymentMethodId": "pm_card_visa"}
                                 """.formatted(listingId, checkIn, checkIn.plusDays(3))))
                 .andExpect(status().isCreated())
                 .andExpect(header().string(RequestIdFilter.REQUEST_ID_HEADER, "test-req-42"));

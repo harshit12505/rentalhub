@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
  * The key layout for cached search pages, kept in one place so that writing a key
  * and invalidating it can never disagree.
  *
- * A key starts with the city: {@code city:goa|guests:4|maxPrice:5000|page:0|size:20}.
+ * A key starts with the city: {@code city:goa|guests:4|maxPrice:5000|currency:INR|page:0|size:20}.
  * Putting the city first partitions the cache. Every page for Goa shares the prefix
  * {@code city:goa|}, and every search with no city filter shares {@code city:|}. A Goa
  * listing can only ever appear in those two partitions, so when it changes only they
@@ -24,6 +24,7 @@ public final class SearchCacheKeys {
         return cityPrefix(criteria.city())
                 + "guests:" + (criteria.minGuests() == null ? "" : criteria.minGuests())
                 + "|maxPrice:" + (criteria.maxPrice() == null ? "" : criteria.maxPrice().toPlainString())
+                + "|currency:" + (criteria.currency() == null ? "" : criteria.currency().name())
                 + "|page:" + criteria.page()
                 + "|size:" + criteria.size();
     }

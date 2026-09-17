@@ -1,0 +1,7 @@
+{
+  "propertyId": 2,
+  "checkIn": "2027-03-20",
+  "checkOut": "2027-03-23",
+  "guests": 2,
+  "paymentMethodId": "pm_card_visa_chargeDeclined"
+}

@@ -2,6 +2,7 @@ package com.rentalhub.persistence;
 
 import com.rentalhub.domain.model.Property;
 import com.rentalhub.domain.model.User;
+import com.rentalhub.domain.model.enums.Currency;
 import com.rentalhub.domain.repository.PropertyRepository;
 import com.rentalhub.domain.repository.UserRepository;
 import com.rentalhub.dto.PropertyRequest;
@@ -107,8 +108,12 @@ class PersistenceMappingTest extends IntegrationTest {
                 .containsExactly("Test apartment");
         assertThat(titles(properties.search(null, 4, null, FIRST_PAGE).getContent()))
                 .containsExactly("Test villa");
-        assertThat(titles(properties.search(null, null, new BigDecimal("3000"), FIRST_PAGE).getContent()))
+        assertThat(titles(properties.search(null, null, Map.of(Currency.INR, new BigDecimal("3000")), FIRST_PAGE)
+                .getContent()))
                 .containsExactly("Test apartment");
+        // A currency with no ceiling matches nothing: both listings are priced in rupees.
+        assertThat(properties.search(null, null, Map.of(Currency.USD, new BigDecimal("1000000")), FIRST_PAGE)
+                .getContent()).isEmpty();
     }
 
     @Test

@@ -29,12 +29,21 @@ public final class TestRequests {
         return new User("Meera Iyer", "meera@example.com", UserRole.GUEST);
     }
 
+    /** Stripe's test card that always succeeds; the simulator the tests run with honours it too. */
+    public static final String PAYS = "pm_card_visa";
+
     public static BookingRequest booking(long propertyId, LocalDate checkIn, LocalDate checkOut, int guests) {
+        return booking(propertyId, checkIn, checkOut, guests, PAYS);
+    }
+
+    public static BookingRequest booking(long propertyId, LocalDate checkIn, LocalDate checkOut, int guests,
+                                         String paymentMethodId) {
         BookingRequest request = new BookingRequest();
         request.setPropertyId(propertyId);
         request.setCheckIn(checkIn);
         request.setCheckOut(checkOut);
         request.setGuests(guests);
+        request.setPaymentMethodId(paymentMethodId);
         return request;
     }
 

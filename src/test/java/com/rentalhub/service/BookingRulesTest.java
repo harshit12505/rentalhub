@@ -119,6 +119,16 @@ class BookingRulesTest {
                 .isInstanceOf(ConflictException.class);
     }
 
+    @Test
+    @DisplayName("a booking whose payment is still being decided can't be cancelled yet")
+    void pendingPaymentNotCancellable() {
+        assertThatThrownBy(() -> rules.checkCancellable(booking(TODAY.plusDays(5), BookingStatus.PENDING)))
+                .isInstanceOfSatisfying(ConflictException.class, ex -> {
+                    assertThat(ex.getMessageKey()).isEqualTo("booking.cancel.paymentPending");
+                    assertThat(TestMessages.english(ex)).isNotBlank();
+                });
+    }
+
     // -------------------------------------------------------------- helpers
 
     /** Asserts the refusal names the right field and key, and that the key has English text. */

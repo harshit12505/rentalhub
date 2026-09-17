@@ -21,9 +21,10 @@ One deployable Spring Boot application. No separate frontend build, no npm, no s
 | 2 | Caching: Caffeine + Redis two-tier cache, after-commit invalidation, listings REST API | ✅ |
 | 3 | Bookings: transactions, optimistic locking, retry and recover, concurrency tests | ✅ |
 | 4 | Auditing (Envers) with listing history, structured logging, nightly stale-listing job, reviews | ✅ |
-| 5–9 | Payments, AI/RAG, extras, frontend, deploy | not started |
+| 5 | Payments (Stripe test mode, or a built-in simulator), refunds, BigDecimal money maths, prices in other currencies | ✅ |
+| 6–9 | AI/RAG, extras, frontend, deploy | not started |
 
-The app has a REST API for listings and bookings (see
+The app has a REST API for listings, bookings (with payments) and reviews (see
 [Trying the API](#trying-the-api-powershell)) and no web pages yet. The startup warning `Cannot find template location: classpath:/templates/` is
 expected until pages arrive in phase 8.
 
@@ -88,6 +89,8 @@ docker compose up -d
 | `Connection refused` to `localhost:5432` | Containers aren't up | `docker compose up -d`, then `docker compose ps` |
 | Log shows `cache.shared.unavailable` or `Unable to connect to Redis` | Redis isn't running | The app keeps working without the shared cache. Start it: `docker compose up -d` |
 | A `-Dsomething=value` flag is ignored or errors | PowerShell splits unquoted `-D` args at the dot | Quote it: `.\mvnw.cmd test "-Dtest=PropertyFactoryTest"` |
+| A booking is refused with `paymentMethodId`: "This field is required." | Since Phase 5 a booking says how it's paid | Add `"paymentMethodId": "pm_card_visa"` to the body |
+| `"displayPrice": null` everywhere, or `"exchangeRatesUnavailable": true` | The exchange-rate API couldn't be reached (offline?) | The app tries again every minute; same-currency prices still work |
 
 ---
 
@@ -101,14 +104,14 @@ docker compose up -d
 | Method | Path | Who | What |
 |---|---|---|---|
 | `GET` | `/api/properties/{id}` | anyone | One listing. Cached: Caffeine → Redis → database |
-| `GET` | `/api/properties?city=&guests=&maxPrice=&page=&size=` | anyone | One page of search results. Cached in Redis |
+| `GET` | `/api/properties?city=&guests=&maxPrice=&currency=&page=&size=` | anyone | One page of search results. `maxPrice` is in `currency` (INR if not given) and compared with each listing in its own currency. Cached in Redis |
 | `POST` | `/api/properties` | a host | Create a listing |
 | `PUT` | `/api/properties/{id}` | that listing's host | Replace a listing (full new state) |
 | `DELETE` | `/api/properties/{id}` | that listing's host | Delete a listing (409 if it has bookings) |
-| `POST` | `/api/bookings` | any user | Book a stay (not at your own listing). Safe against double booking |
+| `POST` | `/api/bookings` | any user | Book and pay for a stay (not at your own listing). Safe against double booking. 201 paid, 202 payment outcome not known yet, 402 card declined, 503 payment provider unavailable |
 | `GET` | `/api/bookings` | any user | Your own trips, latest first |
 | `GET` | `/api/bookings/{id}` | its guest or the listing's host | One booking |
-| `POST` | `/api/bookings/{id}/cancel` | its guest or the listing's host | Cancel, until check-in day. Frees the dates |
+| `POST` | `/api/bookings/{id}/cancel` | its guest or the listing's host | Cancel, until check-in day. Frees the dates, and refunds a paid booking in full |
 | `GET` | `/api/properties/{id}/bookings` | that listing's host | Every booking of the listing |
 | `GET` | `/api/properties/{id}/history` | that listing's host | Every change to the listing: when, by whom, what changed (still readable after deletion) |
 | `POST` | `/api/properties/{id}/reviews` | a guest whose stay there has ended | Review the listing (once) |
@@ -119,6 +122,20 @@ docker compose up -d
 
 Every response carries an `X-Request-Id` header. The same id appears on every log line
 written while handling that request, so a problem report can be matched to the logs.
+
+**Payments.** No Stripe account is needed.
+- **Without `STRIPE_SECRET_KEY`**, payments go to a built-in simulator: bookings say
+  `"provider":"SIMULATED"`, and nothing is charged. It answers to Stripe's test
+  payment-method ids: `pm_card_visa` succeeds, and `pm_card_visa_chargeDeclined` is declined.
+- **With a Stripe test key** (`sk_test_…`) in `STRIPE_SECRET_KEY`, the same requests go to
+  Stripe.
+- **A live key is refused.**
+
+**Prices in your currency.** Add `?currency=USD` (or INR, EUR, GBP, AED) to any read.
+- Rates come from [ExchangeRate-API](https://www.exchangerate-api.com) (Rates By Exchange
+  Rate API), and the app keeps them for an hour.
+- The converted figure is for display only. What is charged and stored is always the
+  listing's own price.
 
 There is no login: the acting user is sent in an `X-Demo-User-Id` header. There is no demo
 data until phase 9, so first create a host by hand (note the `id` it prints):
@@ -162,15 +179,16 @@ docker exec -it rentalhub-postgres psql -U rentalhub -d rentalhub -c "INSERT INT
 ```
 
 ```powershell
-$stay = @{ propertyId = 1; checkIn = "2027-03-10"; checkOut = "2027-03-13"; guests = 2 } | ConvertTo-Json
+$stay = @{ propertyId = 1; checkIn = "2027-03-10"; checkOut = "2027-03-13"; guests = 2; paymentMethodId = "pm_card_visa" } | ConvertTo-Json
 ```
 
 ```powershell
 Invoke-RestMethod -Method Post -Uri http://localhost:8081/api/bookings -Headers @{ "X-Demo-User-Id" = "2" } -ContentType "application/json" -Body $stay
 ```
 
-The booking comes back `CONFIRMED`: 3 nights, `totalAmount` 36000.00 INR. Send the same request
-again and you get a 409, because those dates are now taken.
+The booking comes back `CONFIRMED` and paid (`payment.status` `PAID`, provider `SIMULATED`):
+3 nights, `totalAmount` 36000.00 INR. Send the same request again and you get a 409, because
+those dates are now taken.
 
 ---
 

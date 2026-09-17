@@ -23,17 +23,22 @@ added at the end of every phase.
 | 1 | Foundation | ✅ done | `29081ff` |
 | 2 | Caching (Caffeine + Redis) + listings REST API | ✅ done | `30f5d45` (+ docs `498df7c`), merged via PR #1 (`0ce70c6`) |
 | 3 | Bookings & concurrency | ✅ done | `6c20a81`, merged via PR #2 (`5305753`) |
-| 4 | Auditing, logging & scheduling (+ reviews) | ✅ done | `Phase 4: …` on branch `phase-4-auditing` (see `git log`) |
-| 5 | Payments & money | next — waiting for your go-ahead | |
-| 6 | AI / RAG | | |
+| 4 | Auditing, logging & scheduling (+ reviews) | ✅ done | `1fbd71a` on branch `phase-4-auditing`, PR #3 open |
+| 5 | Payments & money (+ currencies) | ✅ done | `Phase 5: …` on branch `phase-5-payments`, which starts from Phase 4 (see `git log`) |
+| 6 | AI / RAG | next — waiting for your go-ahead | |
 | 7 | S3, i18n, GraphQL, OpenAPI, Postman | | |
 | 8 | Frontend (Thymeleaf) | | |
 | 9 | Ship: seeder, Docker, Render | | |
 
-**Numbers after Phase 4:** 162 automated tests (94 unit, 68 integration against real
+**Numbers after Phase 5:** 269 automated tests (183 unit, 86 integration against real
 Postgres and Redis), all passing. Sixteen REST endpoints: listings (with their history),
-bookings and reviews. Every change to a listing, booking or review is recorded with who
-made it; every log line carries its request id; a nightly job retires expired listings.
+bookings and reviews.
+- **Payments:** bookings are paid for (Stripe test mode, or a built-in simulator) and
+  refunded when cancelled, and a job settles payments whose answer was lost.
+- **Currencies:** prices can be shown in five currencies, and the price filter compares
+  them fairly.
+- **Carried over from Phase 4:** every change is recorded with who made it, and every log
+  line carries its request id.
 
 Commit ids changed on 15 Sep 2026, when the history was rewritten (see the log). Older
 notes may still mention the previous ids.
@@ -42,21 +47,31 @@ notes may still mention the previous ids.
 
 ## 2. Your to-do list
 
-### Before Phase 5 (recommended)
+### Before Phase 6 (recommended)
 - [ ] Work through the **[hands-on guide](hands-on-guide.md)**.
-  - Parts 0–26 cover Phases 1–3, if you haven't done them yet.
-  - **Parts 28–34 are new** (about 30 minutes): see every request's id, read a listing's
-    history, look inside the audit tables, write and edit a review, watch the nightly job
-    run (set to every minute), and switch the logs to JSON.
-- [ ] **GitHub:** Phase 4 is committed on the branch `phase-4-auditing` and not pushed.
-      When you want it on GitHub, say so and I'll push it and open its pull request.
+  - **Parts 36–43 are new** (about 30 minutes):
+    - pay for a booking;
+    - see a declined card give the dates back;
+    - watch the reconciliation job settle a payment whose answer was lost;
+    - cancel and get refunded;
+    - see prices in other currencies.
+  - Several earlier parts now show a little more (a booking's `payment`, `v2` cache keys,
+    more audit revisions). They were re-run and updated.
+- [ ] **GitHub:** PR #3 (Phase 4) is still open. Phase 5 is committed on
+      `phase-5-payments`, which starts from Phase 4. Merge PR #3 first, then tell me, and
+      I'll push Phase 5 and open its pull request; it will then show only Phase 5's changes.
+- [ ] **Stripe (optional):** Stripe accounts in India are invite-only, so you may not be able
+      to get test keys. You don't need them: the simulator covers every path. If you do get
+      one, [05 — Payments](05-payments.md) has the steps (not verified by me).
+- [ ] **Gemini API key, for Phase 6** (free, no card): aistudio.google.com → Get API key.
+      Keep it out of the repo; it will go in an environment variable.
 
 ### Reading
-- [ ] [04 — Auditing, logging and scheduling](04-auditing.md), and answer its interview
-      questions out loud. "What can't Envers see?" is the one that separates a good answer
-      from a great one.
-- [ ] The Phase 4 videos in [section 6](#6-youtube-study-plan--every-phase)
-- [ ] If not done yet: [03 — Bookings and concurrency](03-bookings.md) and the Phase 3 videos
+- [ ] [05 — Payments, money and currencies](05-payments.md), and answer its interview
+      questions out loud. "What if the server crashes after charging but before confirming
+      the booking?" is the one to get right.
+- [ ] The Phase 5 videos in [section 6](#6-youtube-study-plan--every-phase)
+- [ ] If not done yet: [04 — Auditing, logging and scheduling](04-auditing.md) and the Phase 4 videos
 
 ### Still open from Phase 1
 - [ ] If not done yet: `docker compose down -v` once (old draft V1 in your local volume),
@@ -65,6 +80,69 @@ notes may still mention the previous ids.
 ---
 
 ## 3. Log
+
+### Session 5 — Phase 5: payments, money & currencies (15–16 Sep 2026)
+
+**Built**
+- **Paying for a booking, as a saga:**
+  - the booking is inserted `PENDING`, which holds its dates;
+  - a payment is created at the provider, its id recorded, then the payment confirmed;
+  - the booking ends `CONFIRMED`/`PAID`, or `CANCELLED`/`FAILED` with its dates freed (the
+    compensating action), or stays `PENDING` when the provider's answer was lost;
+  - no external call inside a database transaction. Every provider call carries an
+    idempotency key (booking id + creation time + step);
+  - V3 adds `payment_status`, `payment_provider` and `refund_reference` (also to
+    `bookings_aud`), and a partial index for the job.
+- **Payment providers:** one `PaymentGateway` interface, two implementations:
+  - `StripePaymentGateway`: stripe-java 33.4.2, PaymentIntents confirmed on the server,
+    redirects off;
+  - `SimulatedPaymentGateway`, used when there's no key: Stripe's test ids, plus
+    `pm_sim_noAnswer` and `pm_sim_providerDown`.
+
+  A live key is refused, and the key is never logged.
+- **Answers:** 201 paid, 202 outcome unknown, 402 declined or 3-D Secure, 503 provider
+  refused (with `Retry-After`).
+- **Refunds:** cancelling a paid booking refunds it in full; a refund that fails stays owed.
+- **PaymentReconciliationJob:** every 5 minutes it settles payments still undecided after
+  10 minutes (it asks the provider), and retries refunds owed.
+- **Money maths:** `Currency.toMinorUnits` (exact; never rounds) and `MoneyMathTest`.
+- **Currencies:** `?currency=` adds `displayPrice`/`displayTotal`, for display only. The
+  live rates come from ExchangeRate-API:
+  - kept for an hour;
+  - the last good set is used for up to 48 hours;
+  - a failed fetch waits a minute before the next try;
+  - one fetch at a time.
+- **`maxPrice` fixed:**
+  - converted into a ceiling per listing currency (rounded down), INR by default;
+  - without rates, only same-currency listings match, and the page says
+    `exchangeRatesUnavailable`;
+  - the currency is part of the search cache key, and the key prefix is now `v2`.
+- **Tests:** 107 more, 269 in all (183 unit, 86 integration).
+  - Unit: `MoneyMathTest`, `ExchangeRatesTest`, `ExchangeRateApiSourceTest`,
+    `CurrencyServiceTest`, `StripePaymentGatewayTest` (against a fake Stripe server),
+    `SimulatedPaymentGatewayTest`, `StripeConfigTest`, `PaymentServiceTest`,
+    `PaymentReconciliationJobScheduleTest`.
+  - Integration: `BookingPaymentApiTest`, `CurrencyApiTest`, `PaymentReconciliationJobTest`.
+- **Docs:**
+  - [05 — Payments, money and currencies](05-payments.md);
+  - hands-on guide Parts 36–43, and updates to earlier parts;
+  - payment and currency samples;
+  - README, CLAUDE.md, and notes in 00, 02 and 03.
+
+**Judgement calls (explained before coding):** D46–D55 below. The notable ones:
+- the simulator when there's no Stripe key, which replaces D31's "confirm without payment",
+  because Stripe India is invite-only;
+- refunds on cancellation, and the reconciliation job. The spec names neither, but without
+  them "no half-created booking" wouldn't hold when things fail;
+- `maxPrice` without a currency means INR.
+
+**Verified by hand** on 16 Sep 2026, against throwaway containers (Postgres 55433, Redis
+56380, the packaged jar on 8093):
+- every step of the new Parts 36–43, with the job every 20 seconds;
+- every earlier part whose output Phase 5 changed: Parts 4, 7–8, 10–11, 19, 21–25, 28
+  and 31–34.
+
+**Result:** 269/269 tests passing.
 
 ### Session 4 — Phase 4: auditing, logging & scheduling (15 Sep 2026)
 
@@ -373,7 +451,7 @@ Why each non-obvious choice was made. Interviewers love "why".
 | D28 | The overlap-constraint violation becomes "just taken" straight away, not retried | a retry could only give the same answer, less precisely |
 | D29 | Keep the "already booked" check before inserting | the cheap, precise answer for the everyday case; the guarantee comes after it |
 | D30 | A booking evicts only its listing's cache entry | the cached view shows the version; search pages don't |
-| D31 | Bookings are CONFIRMED immediately until Phase 5 | there's no payment step yet; the same as Phase 5 without a Stripe key |
+| D31 | Bookings are CONFIRMED immediately until Phase 5 | there's no payment step yet; the same as Phase 5 without a Stripe key *(superseded by D48: without a key, payments are simulated)* |
 | D32 | Booking rules: ≤ 90 nights (configurable), guests ≤ the listing's limit, stay ends by `availableUntil`, not your own listing, any role may book | the spec didn't say; each rule is a judgement call, flagged before coding |
 | D33 | Cancel is `POST /bookings/{id}/cancel`, idempotent, until check-in day | a cancelled booking stays on record; a repeated request is harmless |
 | D34 | Any `ConcurrencyFailureException` reaching the API is a 409 `error.concurrentUpdate` | "the data changed under you, try again", not "the server is broken" |
@@ -388,6 +466,16 @@ Why each non-obvious choice was made. Interviewers love "why".
 | D43 | Structured logging with SLF4J key/value pairs and the MDC; `key=value` locally, ECS JSON on Render; every event log converted | one searchable style; the local look (and the hands-on guide) unchanged |
 | D44 | A caller's `X-Request-Id` is kept only if it matches `[A-Za-z0-9._-]{1,64}`, otherwise 8 random hex characters | follow an id across systems, without letting a caller forge log lines |
 | D45 | StaleListingJob: configurable cron (03:15 UTC), one transaction per listing through PropertyService, no distributed lock | failures isolated; caches and history stay correct; a single instance for now |
+| D46 | Paying is a saga: hold the dates (PENDING), create the payment, record its id, confirm it, then confirm or release the booking. No external call inside a transaction | a rollback can't undo a charge; the id recorded before any money moves makes every failure recoverable |
+| D47 | The booking request carries a `paymentMethodId` (Stripe test ids), confirmed on the server with redirects off; 3-D Secure gets a 402 for now | there's no browser until Phase 8; card numbers never reach the server |
+| D48 | No Stripe key: a payment simulator answering to Stripe's test ids (plus `pm_sim_noAnswer`, `pm_sim_providerDown`), labelled SIMULATED; live keys refused | Stripe India is invite-only; every payment path must be seen without an account; a misplaced live key must never charge a card |
+| D49 | 201 paid, 202 outcome unknown, 402 declined or 3-D Secure, 503 provider refused (`Retry-After: 60`) | each code tells the client what to do next |
+| D50 | A failed payment keeps its booking (CANCELLED, payment FAILED); a separate `payment_status` beside the four booking statuses, plus `payment_provider` and `refund_reference` | bookings are records, and the provider's payment points at one; "is the stay on?" and "where's the money?" are different questions |
+| D51 | Cancelling a paid booking refunds it in full (the cancel commits first, the refund follows); a PENDING booking can't be cancelled | free cancellation until check-in (Phase 3's rule); no race with an undecided payment |
+| D52 | PaymentReconciliationJob every 5 minutes: settles payments undecided for 10 minutes by asking the provider, retries refunds owed | lost answers and crashes between steps are where half-made bookings come from |
+| D53 | Idempotency key = booking id + creation time + step; the creation time cut to microseconds when saved | ids repeat after a development database is wiped; the time in memory must equal the time stored |
+| D54 | Exchange rates from ExchangeRate-API's free endpoint, kept in memory (1 h, last good set up to 48 h, 1 min between failed tries, one fetch at a time); shown only on request, never stored or cached | free, no key, has AED (the ECB's rates don't); an outage must never slow every request |
+| D55 | `maxPrice` becomes one ceiling per listing currency, rounded down; INR if no currency is given; without rates only same-currency listings, flagged and not cached; currency in the cache key; key prefix v2 | a fair comparison without storing converted prices; old searches keep their meaning; rounding never lets an over-budget listing in |
 
 ---
 
@@ -420,6 +508,10 @@ Each of these is a good "tell me about a problem you solved" story.
 | 5.22 | The "readable history" PowerShell command printed empty fields | Windows PowerShell 5.1's `Invoke-RestMethod` passes a JSON array down the pipeline as one object | wrap the call in parentheses so the array is unrolled; the guide says why |
 | 5.23 | The job's history entry also showed `availableUntil` changing (not a bug, a lesson) | the date had been set with plain SQL, which Envers never sees, so the next audited change swept it up | kept in the guide on purpose; production code changes data only through the services |
 | 5.24 | A listing with no history rows answered "There is no listing with id N" | an empty history was treated as "no listing" | it now checks the listing exists, then returns an empty list (host only); tested |
+| 5.25 | `PaymentServiceTest` failed with "No interactions wanted here" | building `PaymentGateways` asks each gateway for its provider, and that call to the mock counts as an interaction | removed the check. Lesson: `verifyNoInteractions` sees every call, including the ones your own test setup makes |
+| 5.26 | No way to get Stripe keys (found while planning) | Stripe accounts in India are invite-only | the payment simulator (D48): every payment path works, and is tested, without an account |
+| 5.27 | A wiped development database could make Stripe replay an old payment (caught in design) | booking ids start again at 1, and Stripe remembers idempotency keys for 24 hours | the key includes the booking's creation time, cut to microseconds when it's saved, so the time in memory equals the one stored |
+| 5.28 | The hands-on guide's audit revision numbers stopped matching (Parts 31–33) | a booking now takes three transactions (held, payment recorded, paid), so it makes three revisions | re-ran Parts 28–34 and updated every number |
 | 5.19 | The history rewrite was undone right after it ran | the recovery command (`git reset --hard refs/original/…`), meant only for when a check failed, was listed with a Run button among the steps and got run | `git reflog` still listed the rewritten `main` (`5305753`), so `git reset --hard 5305753` and a force-push restored it. Lesson: Git rarely loses a commit, because the reflog records every position a branch has had |
 
 ---
@@ -433,7 +525,7 @@ Each of these is a good "tell me about a problem you solved" story.
 - Spring Boot 3 videos are fine for concepts: Boot 4 mostly renamed packages and
   dependencies.
 - Tick the box when you can explain the "you should be able to" line without notes.
-- Watch **Foundations** and **Phases 1–4** now; each later phase's list just before or
+- Watch **Foundations** and **Phases 1–5** now; each later phase's list just before or
   during that phase.
 
 **Channels that cover these topics well:** Amigoscode · Java Brains · Dan Vega ·
@@ -530,6 +622,13 @@ ByteByteGo (system-design concepts) · Fireship (quick overviews) · TechWorld w
 - [ ] [floating point precision explained](https://www.youtube.com/results?search_query=floating+point+precision+explained) — the theory behind BigDecimal
 - [ ] [saga pattern compensating transaction](https://www.youtube.com/results?search_query=saga+pattern+compensating+transaction) — undoing a booking when payment fails
 - [ ] [webhooks explained](https://www.youtube.com/results?search_query=webhooks+explained) — how Stripe tells your app what happened
+- [ ] [java bigdecimal tutorial](https://www.youtube.com/results?search_query=java+bigdecimal+tutorial) — scale, rounding modes, `compareTo`
+- [ ] [distributed transactions two phase commit](https://www.youtube.com/results?search_query=distributed+transactions+two+phase+commit) — why the payment can't join our transaction
+- [ ] [3d secure strong customer authentication](https://www.youtube.com/results?search_query=3d+secure+strong+customer+authentication) — why some cards need a browser
+- [ ] [async request reply pattern 202 accepted](https://www.youtube.com/results?search_query=async+request+reply+pattern+202+accepted) — answering before the work is finished
+- [ ] [payment reconciliation explained](https://www.youtube.com/results?search_query=payment+reconciliation+explained) — matching your records with the provider's
+- [ ] [stale while revalidate caching](https://www.youtube.com/results?search_query=stale+while+revalidate+caching) — using slightly old data while fetching new
+- [ ] [currency conversion api tutorial](https://www.youtube.com/results?search_query=currency+conversion+api+tutorial) — live exchange rates
 
 ### Phase 6 — AI / RAG
 - [ ] [what are embeddings](https://www.youtube.com/results?search_query=what+are+embeddings+machine+learning) — text as a list of numbers that captures meaning
@@ -587,7 +686,7 @@ None are needed yet, and each is optional because the app works without it.
 
 | Phase | Account | Where | Cost |
 |---|---|---|---|
-| 5 | Stripe (test mode keys) | stripe.com | free |
+| 5 | Stripe (test mode keys). Optional: invite-only in India, and the simulator covers every path | stripe.com | free |
 | 6 | Gemini API key | aistudio.google.com | free tier, no card |
 | 7 | AWS (S3 bucket + access keys) | aws.amazon.com | free tier, but signup needs a card |
 | 9 | GitHub (for Render to deploy from) | github.com | free — ✅ already set up |
@@ -607,6 +706,9 @@ Run these from `C:\dev\rentalhub`.
 | Run all tests (Docker must be running) | `.\mvnw.cmd test` |
 | Run one test class | `.\mvnw.cmd test "-Dtest=PropertyCachingTest"` |
 | Use port 8081 (Oracle has 8080) | `$env:PORT = "8081"` |
+| Run the payment job every 20 s (before starting the app) | `$env:PAYMENT_RECONCILIATION_CRON = "0/20 * * * * *"` |
+| Pay with a real Stripe test key (optional) | `$env:STRIPE_SECRET_KEY = "sk_test_…"` |
+| A listing's price in dollars too | `curl.exe -s "http://localhost:8081/api/properties/1?currency=USD"` |
 | Start the app | `.\mvnw.cmd spring-boot:run` |
 | Health check | `curl.exe http://localhost:8081/actuator/health` |
 | Which caches exist | `curl.exe http://localhost:8081/actuator/caches` |

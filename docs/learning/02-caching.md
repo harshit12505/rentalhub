@@ -87,9 +87,11 @@ every client (see `KEYS` in §6.5). Keys with a TTL delete themselves.
 Our keys look like this:
 
 ```
-rentalhub:v1:propertyById::42
-rentalhub:v1:propertySearch::city:goa|guests:4|maxPrice:5000|page:0|size:20
+rentalhub:v2:propertyById::42
+rentalhub:v2:propertySearch::city:goa|guests:4|maxPrice:5000|currency:INR|page:0|size:20
 ```
+
+(Phase 2 built them as `v1`, without the currency; Phase 5 added both. See §4 and §5.)
 
 ---
 
@@ -163,9 +165,10 @@ JSON has only one "number" type, and by default Jackson reads `450.00` back as t
 test `redisRoundTripIsLossless` proves a view read back from Redis is identical to the
 original.
 
-**A versioned key prefix.** Every key starts with `rentalhub:v1:`. If a cached record's
-shape ever changes, bump it to `v2`. The new code will never try to read old-shaped JSON,
-and the old keys simply expire.
+**A versioned key prefix.** Every key starts with a version. When a cached record's shape
+changes, the version goes up, so the new code never tries to read old-shaped JSON, and the
+old keys simply expire. It started as `rentalhub:v1:`. Phase 5 added `displayPrice` to the
+listing records and moved it to `rentalhub:v2:`.
 
 ---
 
@@ -190,10 +193,11 @@ defeat the cache. That's a *cache-busting* attack.
 
 | Search | Key |
 |---|---|
-| Goa, 4+ guests | `city:goa\|guests:4\|maxPrice:\|page:0\|size:20` |
-| Goa, page 2 | `city:goa\|guests:\|maxPrice:\|page:1\|size:20` |
-| Mumbai | `city:mumbai\|guests:\|maxPrice:\|page:0\|size:20` |
-| no city filter | `city:\|guests:\|maxPrice:\|page:0\|size:20` |
+| Goa, 4+ guests | `city:goa\|guests:4\|maxPrice:\|currency:\|page:0\|size:20` |
+| Goa, page 2 | `city:goa\|guests:\|maxPrice:\|currency:\|page:1\|size:20` |
+| Goa, under $100 (Phase 5) | `city:goa\|guests:\|maxPrice:100\|currency:USD\|page:0\|size:20` |
+| Mumbai | `city:mumbai\|guests:\|maxPrice:\|currency:\|page:0\|size:20` |
+| no city filter | `city:\|guests:\|maxPrice:\|currency:\|page:0\|size:20` |
 
 Every Goa page shares the prefix `city:goa|`. The `|` straight after the city is
 important: without it, flushing `goa*` would also flush "goa beach".
@@ -276,7 +280,7 @@ change, is also correct, but it wrecks the hit ratio as soon as hosts edit often
 
 ### 6.5 Deleting by pattern: SCAN, not KEYS
 
-Redis has two ways to find keys matching `rentalhub:v1:propertySearch::city:goa|*`:
+Redis has two ways to find keys matching `rentalhub:v2:propertySearch::city:goa|*`:
 - **`KEYS pattern`** walks the *entire* keyspace in one command. Redis is
   single-threaded, so every other client waits until it finishes. On a big Redis that
   can take seconds. It's banned in production at most companies.
@@ -548,7 +552,8 @@ query, returned as a projection.
   seconds. Redis pub/sub is the fix, deliberately not built (§7).
 - **The cache-aside race** (§6.3): rare, bounded by TTL.
 - **Max price ignores currency:** ₹5,000 and $5,000 look equal to the filter. Phase 5
-  (currencies) fixes this.
+  (currencies) fixes this. *(Fixed in Phase 5: the limit is compared in each listing's own
+  currency. See [05 — Payments](05-payments.md), §10.)*
 - **Health shows DOWN when Redis is down**, though the app works. To be decided in Phase 9.
 - **Concurrent edits of one listing:** two hosts' PUTs at the same moment make the second
   fail with an optimistic-locking error, currently a 500. Phase 3 handles
@@ -569,8 +574,8 @@ With `docker compose up -d` running and the app started on port 8081 (see the RE
    docker exec -it rentalhub-redis redis-cli
    ```
    Inside it, try `SCAN 0 MATCH rentalhub:* COUNT 100`, then
-   `GET "rentalhub:v1:propertyById::1"` (readable JSON) and
-   `TTL "rentalhub:v1:propertyById::1"` (seconds left).
+   `GET "rentalhub:v2:propertyById::1"` (readable JSON) and
+   `TTL "rentalhub:v2:propertyById::1"` (seconds left).
 3. **Watch Redis live.** Run this in its own window, then use the API:
    ```powershell
    docker exec -it rentalhub-redis redis-cli MONITOR

@@ -25,11 +25,19 @@ import java.util.Objects;
  * (after-commit cache eviction, audit history, what a real request sees) only happens
  * when something commits.
  *
- * The nightly stale-listing job is switched off ("-"): it runs only when a test calls it.
+ * What the application would otherwise reach out to is pinned down:
+ * <ul>
+ *   <li>both scheduled jobs are switched off ("-"): they run only when a test calls them;</li>
+ *   <li>exchange rates are fixed (FixedExchangeRates), so no test depends on the network;</li>
+ *   <li>no Stripe key is set, so payments go to the simulator, which answers to Stripe's
+ *       test payment-method ids.</li>
+ * </ul>
  */
-@SpringBootTest(properties = "rentalhub.jobs.stale-listings.cron=-")
+@SpringBootTest(properties = {
+        "rentalhub.jobs.stale-listings.cron=-",
+        "rentalhub.jobs.payment-reconciliation.cron=-"})
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, FixedExchangeRates.class})
 public abstract class IntegrationTest {
 
     @Autowired

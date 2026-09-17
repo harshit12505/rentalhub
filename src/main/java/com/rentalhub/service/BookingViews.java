@@ -28,7 +28,10 @@ final class BookingViews {
                 // Read back from NUMERIC(19,4) it has four decimals; show the currency's own.
                 booking.getCurrency().round(booking.getTotalAmount()),
                 booking.getCurrency(),
+                null,
                 booking.getStatus(),
+                new BookingView.Payment(booking.getPaymentStatus(), booking.getPaymentProvider(),
+                        booking.getPaymentReference(), booking.getRefundReference()),
                 booking.getCreatedAt());
     }
 }

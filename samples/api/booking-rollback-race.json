@@ -2,5 +2,6 @@
   "propertyId": 2,
   "checkIn": "2027-09-10",
   "checkOut": "2027-09-13",
-  "guests": 2
+  "guests": 2,
+  "paymentMethodId": "pm_card_visa"
 }

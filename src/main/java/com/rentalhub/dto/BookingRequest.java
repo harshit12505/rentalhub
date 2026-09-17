@@ -2,6 +2,7 @@ package com.rentalhub.dto;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -34,4 +35,15 @@ public class BookingRequest {
     @NotNull(message = "{validation.required}")
     @Min(value = 1, message = "{booking.guests.min}")
     private Integer guests;
+
+    /**
+     * The card to pay with, as a Stripe PaymentMethod id. In test mode these are Stripe's
+     * ready-made test cards, such as {@code pm_card_visa} (succeeds) or
+     * {@code pm_card_visa_chargeDeclined} (declined); the simulator answers to the same ids.
+     * A real client gets one from Stripe's own card form in the browser, so card numbers
+     * never reach this server.
+     */
+    @NotNull(message = "{validation.required}")
+    @Pattern(regexp = "pm_[A-Za-z0-9_]{1,200}", message = "{booking.paymentMethod.format}")
+    private String paymentMethodId;
 }

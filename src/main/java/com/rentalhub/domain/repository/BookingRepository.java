@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -39,6 +40,28 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
      */
     boolean existsByPropertyIdAndGuestIdAndStatusInAndCheckOutLessThanEqual(
             Long propertyId, Long guestId, Collection<BookingStatus> statuses, LocalDate date);
+
+    /**
+     * Bookings still waiting for their payment's outcome, made before {@code cutoff}: the
+     * payment reconciliation job's first work list. The literal statuses (rather than
+     * parameters) let Postgres use the partial index idx_bookings_payment_follow_up (V3).
+     */
+    @Query("""
+            SELECT b.id FROM Booking b
+            WHERE b.status = com.rentalhub.domain.model.enums.BookingStatus.PENDING
+              AND b.createdAt < :cutoff
+            ORDER BY b.id
+            """)
+    List<Long> findPendingIdsCreatedBefore(@Param("cutoff") Instant cutoff);
+
+    /** Cancelled bookings still holding the guest's money: refunds owed, the job's second list. */
+    @Query("""
+            SELECT b.id FROM Booking b
+            WHERE b.status = com.rentalhub.domain.model.enums.BookingStatus.CANCELLED
+              AND b.paymentStatus = com.rentalhub.domain.model.enums.PaymentStatus.PAID
+            ORDER BY b.id
+            """)
+    List<Long> findRefundOwedIds();
 
     /**
      * Does a live booking already overlap these dates?

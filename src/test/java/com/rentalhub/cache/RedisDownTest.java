@@ -56,7 +56,7 @@ class RedisDownTest {
                 .as("the local tier still caches")
                 .isNotNull();
 
-        assertThat(searchService.search(new SearchCriteria("goa", null, null, 0, 20)).content()).hasSize(1);
+        assertThat(searchService.search(new SearchCriteria("goa", null, null, null, 0, 20)).content()).hasSize(1);
 
         PropertyRequest change = TestRequests.validVilla();
         change.setTitle("Still works");
