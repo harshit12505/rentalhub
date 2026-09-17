@@ -25,6 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
  * Every change to a listing goes through this class, because each one publishes a
  * PropertyChangedEvent, and that event is what keeps the caches honest. A listing
  * changed any other way would leave stale copies behind until they expired.
+ *
+ * Log lines are an event name plus key/value pairs (SLF4J's fluent API). Locally they
+ * print as "listing.created propertyId=1 ..."; in JSON (render profile) each pair is a
+ * field of its own.
  */
 @Slf4j
 @Service
@@ -61,7 +65,11 @@ public class PropertyService {
      */
     @Cacheable(cacheNames = CacheNames.PROPERTY_BY_ID, key = "#id", sync = true)
     public PropertyView getListing(long id) {
-        log.debug("cache.miss cache={} propertyId={} action=load-from-database", CacheNames.PROPERTY_BY_ID, id);
+        log.atDebug().setMessage("cache.miss")
+                .addKeyValue("cache", CacheNames.PROPERTY_BY_ID)
+                .addKeyValue("propertyId", id)
+                .addKeyValue("action", "load-from-database")
+                .log();
         return properties.findWithDetailsById(id)
                 .map(PropertyViews::toView)
                 .orElseThrow(() -> new ResourceNotFoundException("property.notFound", id));
@@ -77,8 +85,12 @@ public class PropertyService {
         Property property = properties.save(factory.create(request, host));
 
         events.publishEvent(PropertyChangedEvent.created(property));
-        log.info("listing.created propertyId={} type={} hostId={} city=\"{}\"",
-                property.getId(), property.getType(), hostId, property.getCity());
+        log.atInfo().setMessage("listing.created")
+                .addKeyValue("propertyId", property.getId())
+                .addKeyValue("type", property.getType())
+                .addKeyValue("hostId", hostId)
+                .addKeyValue("city", property.getCity())
+                .log();
         return PropertyViews.toView(property);
     }
 
@@ -93,8 +105,39 @@ public class PropertyService {
         properties.flush();
 
         events.publishEvent(PropertyChangedEvent.updated(property, previousCity));
-        log.info("listing.updated propertyId={} version={} hostId={}", id, property.getVersion(), actingUserId);
+        log.atInfo().setMessage("listing.updated")
+                .addKeyValue("propertyId", id)
+                .addKeyValue("version", property.getVersion())
+                .addKeyValue("hostId", actingUserId)
+                .log();
         return PropertyViews.toView(property);
+    }
+
+    /**
+     * Takes a listing off the market without deleting it: search stops showing it and
+     * bookings are refused, while its bookings, reviews and history stay. Used by
+     * StaleListingJob; it goes through here like every listing change, so the caches are
+     * invalidated and the audit trail records the change.
+     *
+     * @return false if the listing was already inactive (nothing to do)
+     */
+    @Transactional
+    public boolean deactivate(long id, String reason) {
+        Property property = properties.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("property.notFound", id));
+        if (!property.isActive()) {
+            return false;
+        }
+        property.setActive(false);
+        properties.flush();
+
+        events.publishEvent(PropertyChangedEvent.updated(property, property.getCity()));
+        log.atInfo().setMessage("listing.deactivated")
+                .addKeyValue("propertyId", id)
+                .addKeyValue("availableUntil", property.getAvailableUntil())
+                .addKeyValue("reason", reason)
+                .log();
+        return true;
     }
 
     @Transactional
@@ -107,7 +150,10 @@ public class PropertyService {
         properties.delete(property);
 
         events.publishEvent(PropertyChangedEvent.deleted(property));
-        log.info("listing.deleted propertyId={} hostId={}", id, actingUserId);
+        log.atInfo().setMessage("listing.deleted")
+                .addKeyValue("propertyId", id)
+                .addKeyValue("hostId", actingUserId)
+                .log();
     }
 
     private Property loadOwnedBy(long id, long actingUserId) {

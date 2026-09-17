@@ -1,12 +1,12 @@
 # Hands-on guide: test RentalHub yourself
 
-Everything built so far (Phases 1–3), tested by you, step by step. Each step has the
+Everything built so far (Phases 1–4), tested by you, step by step. Each step has the
 exact PowerShell command and what you should see. Every command and expected output here
 was run and checked against a fresh database: Parts 0–17 on 13 Sep 2026, Parts 18–26 on
-14 Sep 2026.
+14 Sep 2026, Parts 28–34 on 15 Sep 2026.
 
-**Time:** about 45 minutes for Parts 0–17 (Phases 1–2), and 30 more for Parts 18–26
-(Phase 3). **You'll use three PowerShell windows:**
+**Time:** about 45 minutes for Parts 0–17 (Phases 1–2), 30 more for Parts 18–26
+(Phase 3), and 30 more for Parts 28–34 (Phase 4). **You'll use three PowerShell windows:**
 
 | Window | Used for |
 |---|---|
@@ -55,7 +55,7 @@ the ones written here.)
 .\mvnw.cmd test
 ```
 
-✅ Near the end: `Tests run: 131, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS`.
+✅ Near the end: `Tests run: 162, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS`.
 It takes about a minute: the test suite starts its own throwaway Postgres and Redis in
 Docker.
 
@@ -971,7 +971,407 @@ Leave psql with `\q`. You can close Window 3.
 
 ---
 
-## Part 27 — Clean up
+## Part 27 — (moved)
+
+Clean-up is now at the very end, in Part 35.
+
+---
+
+# Phase 4 — Auditing, logging and the nightly job (Parts 28–34)
+
+Another fresh start, so that every listing's history begins at its creation.
+
+## Part 28 — A fresh start, with the nightly job running every minute
+
+1. Stop the app: `Ctrl+C` in Window 1.
+2. In Window 2, wipe the database and start the containers again:
+
+   ```powershell
+   docker compose down -v
+   ```
+
+   ```powershell
+   docker compose up -d
+   ```
+
+3. In Window 1, make the nightly job run at the start of every minute instead of at
+   03:15, so you can watch it in Part 33. The setting lasts only as long as this window.
+
+   ```powershell
+   $env:STALE_LISTINGS_CRON = "0 * * * * *"
+   ```
+
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   ✅ Among the startup lines, Flyway runs both migrations:
+   ```
+   Migrating schema "public" to version "1 - initial schema"
+   Migrating schema "public" to version "2 - auditing and review uniqueness"
+   Successfully applied 2 migrations to schema "public", now at version v2
+   ```
+   ✅ Then, at the start of every minute (with today's date):
+   ```
+   … [   scheduling-1]          c.rentalhub.scheduling.StaleListingJob   : job.staleListings.finished availableUntilBefore=2026-09-15 deactivated=0 failed=0 propertyIds=[] durationMs=98
+   ```
+   The blank column after the thread name is where a request id goes. The job isn't
+   answering a request, so it has none.
+
+4. In Window 2, create the same four users and two listings as in Part 18:
+
+   ```powershell
+   docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "INSERT INTO users (full_name, email, role) VALUES ('Asha Menon','asha@example.com','HOST'), ('Ravi Kumar','ravi@example.com','GUEST'), ('Vikram Rao','vikram@example.com','HOST'), ('Meera Iyer','meera@example.com','GUEST') RETURNING id, full_name, role;"
+   ```
+
+   ```powershell
+   curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/villa.json"
+   ```
+
+   ```powershell
+   curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/apartment.json"
+   ```
+
+   ✅ Users 1–4 as in Part 18, then `201` twice: listing 1 is the villa, listing 2 the
+   apartment.
+
+---
+
+## Part 29 — Every request gets an id
+
+```powershell
+curl.exe -s -i http://localhost:8081/api/properties/1
+```
+
+✅ Among the headers there's `X-Request-Id: e62054f9`. Yours will differ: it's 8 random hex
+characters.
+
+✅ In Window 1, the line logged while answering the request carries the same id, right
+after the thread name:
+```
+… DEBUG [nio-8081-exec-6] e62054f9 com.rentalhub.service.PropertyService    : cache.miss cache=propertyById propertyId=1 action=load-from-database
+```
+Every log line of a request carries its id, so when someone reports "I got an error", the
+id in their response finds every line of that request.
+
+Now send an id of your own:
+
+```powershell
+curl.exe -s -i http://localhost:8081/api/properties/1 -H "X-Request-Id: my-test-1"
+```
+
+✅ `X-Request-Id: my-test-1`. It was kept because it looks like an id. Window 1 stays quiet
+this time: the answer came from the cache, so none of our code ran. An id with odd
+characters, such as a line break someone hopes will forge a fake log line, is replaced by a
+fresh one ([04 — Auditing](04-auditing.md), §6).
+
+---
+
+## Part 30 — A listing's history
+
+Asha renames the villa, then moves it to Mumbai at a higher price:
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X PUT http://localhost:8081/api/properties/1 -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/villa-renamed.json"
+```
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X PUT http://localhost:8081/api/properties/1 -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/villa-moved-to-mumbai.json"
+```
+
+✅ `200` twice. Now read the villa's history, in a readable form:
+
+```powershell
+(Invoke-RestMethod http://localhost:8081/api/properties/1/history -Headers @{ "X-Demo-User-Id" = "1" }) | Select-Object revision, type, changedByName, @{ n = "changes"; e = { ($_.changes | ForEach-Object { "$($_.field): $($_.from) -> $($_.to)" }) -join "; " } } | Format-List
+```
+
+✅
+```
+revision      : 1
+type          : CREATED
+changedByName : Asha Menon
+changes       : type:  -> VILLA; title:  -> Sea breeze villa; description:  -> Four bedrooms, two minutes from the
+                beach.; city:  -> Goa; country:  -> India; pricePerNight:  -> 12000.0000; currency:  -> INR;
+                maxGuests:  -> 8; bedrooms:  -> 4; bathrooms:  -> 3; active:  -> True; hostId:  -> 1;
+                attributes[plotAreaSqm]:  -> 450.00; attributes[hasPool]:  -> True
+
+revision      : 3
+type          : UPDATED
+changedByName : Asha Menon
+changes       : title: Sea breeze villa -> Sunset villa
+
+revision      : 4
+type          : UPDATED
+changedByName : Asha Menon
+changes       : description: Four bedrooms, two minutes from the beach. -> Four bedrooms, now by the sea in Mumbai.;
+                city: Goa -> Mumbai; pricePerNight: 12000.0000 -> 15000.0000
+```
+
+- Each entry says when and who, and lists only the fields that actually changed.
+- Revision 2 is missing because it was the apartment's creation: revision numbers are shared
+  by every audited table.
+- **The parentheses around `Invoke-RestMethod` matter.** Windows PowerShell 5.1 passes a JSON
+  list down the pipeline as one single object unless the call is wrapped in `( … )`, and
+  then every field comes out empty.
+
+The same history as raw JSON:
+
+```powershell
+curl.exe -s http://localhost:8081/api/properties/1/history -H "X-Demo-User-Id: 1"
+```
+
+✅ `[{"revision":1,"changedAt":"2026-09-15T15:37:32.092Z","changedBy":"user:1","changedByName":"Asha Menon","type":"CREATED","changes":[{"field":"type","from":null,"to":"VILLA"},…`
+
+Who else may read it:
+
+| Try | Expected |
+|---|---|
+| the same `curl.exe` with `X-Demo-User-Id: 3` (Vikram, another host) | `403`, `property.history.notHost`: "Only the host of this listing can see its history." |
+| `/api/properties/999/history` as user 1 | `404`, `property.notFound` |
+
+---
+
+## Part 31 — Inside the audit tables
+
+Ravi (user 2) books the apartment:
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8081/api/bookings -H "Content-Type: application/json" -H "X-Demo-User-Id: 2" --data "@samples/api/booking.json"
+```
+
+✅ `201`. The apartment's history still has just one entry, its creation:
+
+```powershell
+(Invoke-RestMethod http://localhost:8081/api/properties/2/history -Headers @{ "X-Demo-User-Id" = "1" }) | Measure-Object | Select-Object -ExpandProperty Count
+```
+
+✅ `1`. A booking raises the listing's version (Phase 3), but it isn't a change to the
+listing, so it isn't in the listing's history.
+
+**Every audited transaction so far** (Envers calls each one a revision):
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT rev, to_timestamp(revtstmp / 1000.0) AS changed_at, changed_by FROM revinfo ORDER BY rev;"
+```
+
+✅ (your times will differ)
+```
+ rev |         changed_at         | changed_by
+-----+----------------------------+------------
+   1 | 2026-09-15 15:37:32.092+00 | user:1
+   2 | 2026-09-15 15:37:32.291+00 | user:1
+   3 | 2026-09-15 15:37:32.739+00 | user:1
+   4 | 2026-09-15 15:37:32.805+00 | user:1
+   5 | 2026-09-15 15:37:33.662+00 | user:2
+```
+
+**The villa's history rows, as Envers stores them.** Whole snapshots; the history view
+works out the differences.
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT rev, revtype, title, city, price_per_night, active FROM properties_aud WHERE id = 1 ORDER BY rev;"
+```
+
+✅
+```
+ rev | revtype |      title       |  city  | price_per_night | active
+-----+---------+------------------+--------+-----------------+--------
+   1 |       0 | Sea breeze villa | Goa    |      12000.0000 | t
+   3 |       1 | Sunset villa     | Goa    |      12000.0000 | t
+   4 |       1 | Sunset villa     | Mumbai |      15000.0000 | t
+```
+`revtype` 0 means created, 1 updated, 2 deleted.
+
+**The booking has a history of its own:**
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT a.id, a.rev, a.revtype, a.status, r.changed_by FROM bookings_aud a JOIN revinfo r ON r.rev = a.rev ORDER BY a.rev;"
+```
+
+✅ One row: booking `1`, revision `5`, `revtype` `0`, `CONFIRMED`, `user:2`.
+
+---
+
+## Part 32 — Reviews
+
+**Ravi tries to review the apartment.** His booking is next year, so he hasn't stayed yet:
+
+```powershell
+curl.exe -s -i -X POST http://localhost:8081/api/properties/2/reviews -H "Content-Type: application/json" -H "X-Demo-User-Id: 2" --data "@samples/api/review.json"
+```
+
+✅ `403`, `review.notStayed`: "You can review a listing only after a stay there has ended."
+
+**A stay that ended two days ago.** This uses SQL, because the booking API rightly refuses
+past dates:
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "INSERT INTO bookings (property_id, guest_id, check_in, check_out, guests, total_amount, currency, status) VALUES (2, 2, CURRENT_DATE - 5, CURRENT_DATE - 2, 2, 7500, 'INR', 'CONFIRMED');"
+```
+
+✅ `INSERT 0 1`. Now run the same review command again.
+
+✅ `HTTP/1.1 201`, `Location: http://localhost:8081/api/reviews/1`, and:
+```
+{"id":1,"propertyId":2,"author":{"id":2,"fullName":"Ravi Kumar"},"rating":5,"comment":"Bright flat, spotless, and the host was lovely.","createdAt":"…"}
+```
+
+**The rules say no:**
+
+| # | Try (the same command, changed as shown) | Status | `messageKey` / detail |
+|---|---|---|---|
+| 1 | Ravi reviews again | 409 | `review.alreadyReviewed`: "You have already reviewed this listing. Edit your review instead." |
+| 2 | Meera (`X-Demo-User-Id: 4`), who never stayed | 403 | `review.notStayed` |
+| 3 | `review-bad-rating.json` (6 stars) as Ravi | 400 | an `errors` list: `rating`, "Rating must be a whole number from 1 to 5." |
+
+**Editing:** only the author may.
+
+```powershell
+curl.exe -s -i -X PUT http://localhost:8081/api/reviews/1 -H "Content-Type: application/json" -H "X-Demo-User-Id: 4" --data "@samples/api/review-edit.json"
+```
+
+✅ `403`, `review.notAuthor`: "Only the guest who wrote this review can change it." Now the
+same command with `X-Demo-User-Id: 2`:
+
+✅ `200`, with `"rating":4` and `"comment":"Bright flat and a lovely host, but the street is noisy at night."`
+
+✅ Window 1 shows both events:
+```
+review.created reviewId=1 propertyId=2 authorId=2 rating=5
+review.updated reviewId=1 propertyId=2 authorId=2 previousRating=5 rating=4
+```
+
+**Anyone can read a listing's reviews:**
+
+```powershell
+curl.exe -s http://localhost:8081/api/properties/2/reviews
+```
+
+✅ A list with the one review, now 4 stars.
+
+**The review's history keeps both versions:**
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT a.id, a.rev, a.revtype, a.rating, r.changed_by FROM reviews_aud a JOIN revinfo r ON r.rev = a.rev ORDER BY a.rev;"
+```
+
+✅
+```
+ id | rev | revtype | rating | changed_by
+----+-----+---------+--------+------------
+  1 |   6 |       0 |      5 | user:2
+  1 |   7 |       1 |      4 | user:2
+```
+
+---
+
+## Part 33 — Watch the nightly job
+
+Make yesterday the villa's last available day. This uses SQL, because the API refuses a date
+in the past, and a date that has passed is exactly what the job looks for:
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "UPDATE properties SET available_until = CURRENT_DATE - 1 WHERE id = 1;"
+```
+
+✅ `UPDATE 1`. Now watch Window 1 until the next minute starts (at most 60 seconds):
+
+✅ With yesterday's and today's dates in place of these:
+```
+… [   scheduling-1]          com.rentalhub.service.PropertyService    : listing.deactivated propertyId=1 availableUntil=2026-09-14 reason=availability-ended
+… [   scheduling-1]          c.rentalhub.scheduling.StaleListingJob   : job.staleListings.finished availableUntilBefore=2026-09-15 deactivated=1 failed=0 propertyIds=[1] durationMs=73
+```
+
+The villa is off the market:
+
+```powershell
+(Invoke-RestMethod http://localhost:8081/api/properties/1).active
+```
+
+✅ `False`. The cached copy was evicted, just as for a host's edit, because the job goes
+through `PropertyService` too.
+
+Look at the last entry in the villa's history:
+
+```powershell
+(Invoke-RestMethod http://localhost:8081/api/properties/1/history -Headers @{ "X-Demo-User-Id" = "1" }) | Select-Object -Last 1 | Select-Object revision, type, changedBy, changedByName, @{ n = "changes"; e = { ($_.changes | ForEach-Object { "$($_.field): $($_.from) -> $($_.to)" }) -join "; " } } | Format-List
+```
+
+✅
+```
+revision      : 8
+type          : UPDATED
+changedBy     : system:stale-listing-job
+changedByName :
+changes       : active: True -> False; availableUntil:  -> 2026-09-14
+```
+
+- **The job is named as the one who made the change,** not a person.
+- **Why does `availableUntil` show up in the job's entry?** You set it with plain SQL, which
+  Envers never sees. The next audited change (the job's) found the date different from the
+  last snapshot and reported it. **The audit trail only sees changes made through the
+  application.** That's why production code never changes data behind its back
+  ([04 — Auditing](04-auditing.md), §5).
+
+At the next minute: `deactivated=0` again. Nothing is left to do, so running the job again
+changes nothing.
+
+---
+
+## Part 34 — Logs as JSON
+
+On Render, the logs are JSON: one object per line, which log tools can filter by field. You
+can switch your console to the same format.
+
+1. Stop the app (`Ctrl+C` in Window 1), then:
+
+   ```powershell
+   $env:LOGGING_STRUCTURED_FORMAT_CONSOLE = "ecs"
+   ```
+
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   ✅ Every log line is now a JSON object, including the job's, once a minute.
+
+2. In Window 2, Meera books 13–16 March, with a request id you choose:
+
+   ```powershell
+   curl.exe -s -i -X POST http://localhost:8081/api/bookings -H "Content-Type: application/json" -H "X-Demo-User-Id: 4" -H "X-Request-Id: json-demo-1" --data "@samples/api/booking-back-to-back.json"
+   ```
+
+   ✅ `201` and `X-Request-Id: json-demo-1`. In Window 1, one line, shown here broken up to
+   fit:
+   ```json
+   {"@timestamp":"2026-09-15T15:40:54.813020100Z","log":{"level":"INFO","logger":"com.rentalhub.service.BookingService"},
+    "process":{"pid":7400,"thread":{"name":"http-nio-8081-exec-2"}},"service":{"name":"rentalhub","version":"1.0.0","node":{}},
+    "message":"booking.created","userId":"4","requestId":"json-demo-1","bookingId":3,"propertyId":2,"guestId":4,
+    "checkIn":"2027-03-13","checkOut":"2027-03-16","total":7500.00,"currency":"INR","ecs":{"version":"8.11"}}
+   ```
+   The message is just the event's name. Every detail is a field of its own (`bookingId`,
+   `total`, …), and so are the request id and user from the MDC. Booking 3, because the
+   past stay you created in Part 32 is booking 2.
+
+3. Back to normal. Stop the app, clear both settings, and start it again:
+
+   ```powershell
+   Remove-Item Env:LOGGING_STRUCTURED_FORMAT_CONSOLE
+   ```
+
+   ```powershell
+   Remove-Item Env:STALE_LISTINGS_CRON
+   ```
+
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   ✅ Plain log lines again, and no job run every minute. It's back to 03:15.
+
+---
+
+## Part 35 — Clean up
 
 - Stop the app: `Ctrl+C` in Window 1 (or ⏹ in IntelliJ).
 - Stop the containers but keep the data:
@@ -987,7 +1387,7 @@ Leave psql with `\q`. You can close Window 3.
 
 ## What you just proved
 
-- [ ] All 131 automated tests pass on your machine
+- [ ] All 162 automated tests pass on your machine
 - [ ] Flyway built the schema; the double-booking rule and CHECK constraints are in Postgres
 - [ ] The factory builds each type and enforces each type's rules (400s with the field)
 - [ ] Permissions: guests can't create; only the owner edits (403s)
@@ -1006,6 +1406,14 @@ Leave psql with `\q`. You can close Window 3.
 - [ ] A booking that loses the version race is retried and charged the fresh price (seen with a lock you held)
 - [ ] The database refuses an overlap the app's check couldn't see, and the guest gets "just taken"
 - [ ] Two edits at once: a 409, not a 500
+- [ ] Every response has an `X-Request-Id`, and the same id is on its log lines
+- [ ] A listing's history lists each change: when, by whom, and exactly what changed
+- [ ] Only the host can read it, and bookings don't appear in it
+- [ ] Envers keeps whole snapshots in the `_aud` tables, and who made each revision in `revinfo`
+- [ ] Only a guest whose stay has ended can review, once; edits are kept in `reviews_aud`
+- [ ] The nightly job deactivated an expired listing, and the history names the job
+- [ ] A change made with plain SQL is invisible to the audit trail until the next audited change
+- [ ] The same events logged as JSON, each detail its own field
 
 ---
 
@@ -1026,6 +1434,10 @@ Leave psql with `\q`. You can close Window 3.
 | A curl in Parts 24–26 never returns | the transaction in Window 3 is still open (that's the point, until you end it) | type `COMMIT;` (or `ROLLBACK;`) in Window 3 |
 | Part 24's booking returns at once, at `7500.00` | the `UPDATE` in Window 3 wasn't run, or was already committed | check that it printed `UPDATE 1` and the prompt shows `*`, then redo the step |
 | `curl: option -Z: is unknown` (Part 23) | a very old curl | `curl.exe --version` should be 7.66 or newer; Windows 11 ships 8.x |
+| The readable history (Parts 30, 33) shows empty fields | the `Invoke-RestMethod` call isn't wrapped in parentheses | copy the command exactly, `( … )` included |
+| Part 33: nothing happens at the start of the minute | `STALE_LISTINGS_CRON` wasn't set in Window 1 before the app started | `Ctrl+C`, set it (Part 28, step 3), start again |
+| A listing's history is `[]` | the listing was created before Phase 4 and hasn't changed since | redo Part 28, or change the listing once |
+| `Remove-Item : Cannot find path 'Env:…'` (Part 34) | that setting wasn't set in this window | harmless; carry on |
 
 **Tip:** to see a JSON response nicely indented, pipe it through PowerShell:
 `curl.exe -s http://localhost:8081/api/properties/1 | ConvertFrom-Json | ConvertTo-Json -Depth 5`

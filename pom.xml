@@ -57,6 +57,12 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
+        <!-- Auditing: Hibernate Envers writes a history row for every change to an audited entity -->
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-envers</artifactId>
+        </dependency>
+
         <!-- Bean validation (@NotNull, @Size, ...) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

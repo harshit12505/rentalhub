@@ -6,6 +6,9 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
+import org.hibernate.envers.RelationTargetAuditMode;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -28,11 +31,18 @@ import java.util.Map;
  *
  * id, version and the timestamps have no setters: they belong to the database and
  * Hibernate, and code that changed the version by hand would defeat the locking.
+ *
+ * Audited by Envers: every committed change also writes the listing's new state to
+ * properties_aud. Every subtype carries {@code @Audited} too, and adding a type means
+ * adding its columns to properties_aud as well. Not audited: the images (they get their
+ * own storage in phase 7), {@code updatedAt} (the revision records when), and, as
+ * Envers does by default, the version.
  */
 @Entity
 @Table(name = "properties")
 @Inheritance(strategy = InheritanceType.SINGLE_TABLE)
 @DiscriminatorColumn(name = "property_type", discriminatorType = DiscriminatorType.STRING, length = 31)
+@Audited
 @Getter
 @Setter
 public abstract class Property {
@@ -47,8 +57,10 @@ public abstract class Property {
     @Setter(AccessLevel.NONE)
     private Long version;
 
+    /** The history stores the host's id; users themselves have no history. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "host_id", nullable = false)
+    @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)
     private User host;
 
     @Column(nullable = false, length = 150)
@@ -92,6 +104,7 @@ public abstract class Property {
 
     @OneToMany(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder ASC")
+    @NotAudited
     private List<PropertyImage> images = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -100,6 +113,7 @@ public abstract class Property {
 
     @Column(name = "updated_at", nullable = false)
     @Setter(AccessLevel.NONE)
+    @NotAudited
     private Instant updatedAt;
 
     /** Each subclass answers for itself, so Java and the discriminator column cannot disagree. */

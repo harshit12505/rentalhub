@@ -1,0 +1,10 @@
+# Settings for the Render deployment (Render sets SPRING_PROFILES_ACTIVE=render).
+# Phase 9 adds the rest of the deployment settings.
+
+logging:
+  structured:
+    format:
+      # One JSON object per log line, in the Elastic Common Schema. Every key/value
+      # pair of an event (bookingId, propertyId, ...) and every MDC entry (requestId,
+      # userId) becomes its own field, so a log tool can filter on it.
+      console: ecs

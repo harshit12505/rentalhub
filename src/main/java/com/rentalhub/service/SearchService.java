@@ -47,7 +47,11 @@ public class SearchService {
      */
     @Cacheable(cacheNames = CacheNames.PROPERTY_SEARCH, keyGenerator = CacheNames.SEARCH_KEY_GENERATOR)
     public SearchResultPage search(SearchCriteria criteria) {
-        log.debug("cache.miss cache={} criteria={} action=query-database", CacheNames.PROPERTY_SEARCH, criteria);
+        log.atDebug().setMessage("cache.miss")
+                .addKeyValue("cache", CacheNames.PROPERTY_SEARCH)
+                .addKeyValue("criteria", criteria)
+                .addKeyValue("action", "query-database")
+                .log();
         Page<Property> page = properties.search(
                 criteria.city(), criteria.minGuests(), criteria.maxPrice(),
                 PageRequest.of(criteria.page(), criteria.size(), NEWEST_FIRST));

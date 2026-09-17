@@ -54,7 +54,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     /** A business rule refused the request: a listing's type rules, a booking's date rules. */
     @ExceptionHandler(InvalidRequestException.class)
     public ProblemDetail handleInvalidRequest(InvalidRequestException ex, Locale locale) {
-        log.debug("Request rejected: messageKey={} field={}", ex.getMessageKey(), ex.getField());
+        log.atDebug().setMessage("request.rejected")
+                .addKeyValue("messageKey", ex.getMessageKey())
+                .addKeyValue("field", ex.getField())
+                .log();
         ProblemDetail problem = localizedProblem(HttpStatus.BAD_REQUEST, ex, locale);
         if (ex.getField() != null) {
             problem.setProperty("field", ex.getField());
@@ -87,7 +90,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      */
     @ExceptionHandler(ConcurrencyFailureException.class)
     public ProblemDetail handleConcurrentUpdate(ConcurrencyFailureException ex, Locale locale) {
-        log.info("request.conflict reason=concurrent-update error=\"{}\"", ex.getMessage());
+        log.atInfo().setMessage("request.conflict")
+                .addKeyValue("reason", "concurrent-update")
+                .addKeyValue("error", ex.getMessage())
+                .log();
         return problem(HttpStatus.CONFLICT, new DefaultMessageSourceResolvable(CONCURRENT_UPDATE),
                 CONCURRENT_UPDATE, locale);
     }

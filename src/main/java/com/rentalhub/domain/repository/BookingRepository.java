@@ -34,6 +34,13 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     boolean existsByPropertyId(Long propertyId);
 
     /**
+     * Has this guest a booking here, in one of these statuses, whose check-out day is on or
+     * before {@code date}? ReviewService asks it to decide whether a guest has stayed.
+     */
+    boolean existsByPropertyIdAndGuestIdAndStatusInAndCheckOutLessThanEqual(
+            Long propertyId, Long guestId, Collection<BookingStatus> statuses, LocalDate date);
+
+    /**
      * Does a live booking already overlap these dates?
      * Two ranges overlap when each one starts before the other ends.
      *

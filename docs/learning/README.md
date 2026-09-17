@@ -10,6 +10,7 @@ interview. One doc per phase, written as each phase is built.
 | [00 — Stack choices](00-stack-choices.md) | Why each technology, what the alternatives were, and what to say when asked |
 | [01 — Foundation](01-foundation.md) | Maven, Spring Boot, JPA/Hibernate, Flyway, the schema, the double-booking constraint, BigDecimal, the Factory + Template Method patterns, i18n keys, testing |
 | [02 — Caching](02-caching.md) | Cache-aside, Caffeine + Redis tiers, W-TinyLFU, cache stampedes, search keys and partitions, after-commit invalidation, SCAN vs KEYS, deferred vs immediate removal, Redis outages, the REST API, N+1 |
+| [04 — Auditing, logging and scheduling](04-auditing.md) | Audit trails with Hibernate Envers, revisions and `_aud` tables, recording who made a change, the listing history view, what the audit trail can't see, structured logging with key/value pairs and the MDC, request ids and log injection, JSON logs, `@Scheduled` cron jobs, the reviews rules |
 | [03 — Bookings and concurrency](03-bookings.md) | The double-booking race, ACID and isolation levels, optimistic locking and `OPTIMISTIC_FORCE_INCREMENT`, retry with backoff and jitter, recover, the self-invocation trap, the exclusion constraint under concurrency, the deadlock we found, testing races deterministically |
 
 ## How to use them
@@ -66,3 +67,12 @@ interview. One doc per phase, written as each phase is built.
 | **Proxy (Spring)** | An object Spring puts in front of your bean to add behaviour around its method calls: transactions, caching, retry. |
 | **Self-invocation** | A bean calling its own method through `this`. The call skips the proxy, so `@Transactional` doesn't apply. |
 | **Flaky test** | A test that passes or fails at random, usually because it depends on timing. |
+| **Audit trail** | A permanent record of every change: what it was, when, and who made it. |
+| **Envers** | Hibernate's auditing module: it copies each changed row into a history table automatically. |
+| **Revision** | One audited transaction. Every history row points to the revision that produced it. |
+| **Structured logging** | Logging an event as named fields (`bookingId=7`), not as a sentence, so tools can search and count by field. |
+| **MDC** | Mapped Diagnostic Context: a per-thread map of values (such as the request id) that every log line on that thread includes. |
+| **Request id** | A short id given to each request, returned in `X-Request-Id` and printed on every log line of that request. |
+| **Log injection** | Sneaking a line break into logged input to forge a fake log line. The request-id filter refuses such ids. |
+| **Cron expression** | A schedule written as fields (second, minute, hour, day, month, weekday): `0 15 3 * * *` is "03:15 every day". |
+| **Idempotent job** | A job that is safe to run twice: the second run finds nothing left to do. |

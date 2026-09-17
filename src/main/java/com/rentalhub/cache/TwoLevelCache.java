@@ -157,8 +157,12 @@ public class TwoLevelCache implements Cache {
         try {
             return action.get();
         } catch (RuntimeException e) {
-            log.warn("cache.shared.unavailable cache={} operation={} key={} error=\"{}\"",
-                    getName(), operation, key, e.getMessage());
+            log.atWarn().setMessage("cache.shared.unavailable")
+                    .addKeyValue("cache", getName())
+                    .addKeyValue("operation", operation)
+                    .addKeyValue("key", key)
+                    .addKeyValue("error", e.getMessage())
+                    .log();
             return null;
         }
     }

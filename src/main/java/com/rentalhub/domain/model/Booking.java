@@ -7,14 +7,21 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.envers.Audited;
+import org.hibernate.envers.RelationTargetAuditMode;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
+/**
+ * A stay at a listing. Audited by Envers, so bookings_aud records every status change
+ * (confirmed, cancelled, ...) along with who made it.
+ */
 @Entity
 @Table(name = "bookings")
+@Audited
 @Getter
 @Setter
 @NoArgsConstructor
@@ -36,6 +43,7 @@ public class Booking {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "guest_id", nullable = false)
+    @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)
     private User guest;
 
     @Column(name = "check_in", nullable = false)

@@ -70,8 +70,11 @@ public class RetryConfig {
         @Override
         public void beforeRetry(RetryPolicy policy, Retryable<?> retryable, RetryState state) {
             Throwable cause = state.getLastException();
-            log.info("retry.attempt operation={} retry={} cause={}", operation, state.getRetryCount(),
-                    cause == null ? "unknown" : cause.getClass().getSimpleName());
+            log.atInfo().setMessage("retry.attempt")
+                    .addKeyValue("operation", operation)
+                    .addKeyValue("retry", state.getRetryCount())
+                    .addKeyValue("cause", cause == null ? "unknown" : cause.getClass().getSimpleName())
+                    .log();
         }
     }
 }

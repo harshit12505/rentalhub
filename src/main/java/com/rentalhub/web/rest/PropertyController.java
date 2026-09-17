@@ -1,9 +1,11 @@
 package com.rentalhub.web.rest;
 
+import com.rentalhub.dto.ListingHistoryEntry;
 import com.rentalhub.dto.PropertyRequest;
 import com.rentalhub.dto.PropertyView;
 import com.rentalhub.dto.SearchCriteria;
 import com.rentalhub.dto.SearchResultPage;
+import com.rentalhub.service.ListingHistoryService;
 import com.rentalhub.service.PropertyService;
 import com.rentalhub.service.SearchService;
 import jakarta.validation.Valid;
@@ -24,6 +26,7 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.util.List;
 
 /**
  * Listings over REST.
@@ -39,10 +42,14 @@ public class PropertyController {
 
     private final PropertyService propertyService;
     private final SearchService searchService;
+    private final ListingHistoryService historyService;
 
-    public PropertyController(PropertyService propertyService, SearchService searchService) {
+    public PropertyController(PropertyService propertyService,
+                              SearchService searchService,
+                              ListingHistoryService historyService) {
         this.propertyService = propertyService;
         this.searchService = searchService;
+        this.historyService = historyService;
     }
 
     @GetMapping("/{id}")
@@ -80,5 +87,15 @@ public class PropertyController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable long id, @RequestHeader(ApiHeaders.DEMO_USER_ID) long userId) {
         propertyService.delete(id, userId);
+    }
+
+    /**
+     * Every recorded change to the listing, oldest first: when, by whom, and what changed.
+     * Only its host may see it, and still can after deleting the listing.
+     */
+    @GetMapping("/{id}/history")
+    public List<ListingHistoryEntry> history(@PathVariable long id,
+                                             @RequestHeader(ApiHeaders.DEMO_USER_ID) long userId) {
+        return historyService.history(id, userId);
     }
 }

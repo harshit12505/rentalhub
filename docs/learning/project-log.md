@@ -23,17 +23,17 @@ added at the end of every phase.
 | 1 | Foundation | ✅ done | `29081ff` |
 | 2 | Caching (Caffeine + Redis) + listings REST API | ✅ done | `30f5d45` (+ docs `498df7c`), merged via PR #1 (`0ce70c6`) |
 | 3 | Bookings & concurrency | ✅ done | `6c20a81`, merged via PR #2 (`5305753`) |
-| 4 | Auditing & scheduling | next — waiting for your go-ahead | |
-| 5 | Payments & money | | |
+| 4 | Auditing, logging & scheduling (+ reviews) | ✅ done | `Phase 4: …` on branch `phase-4-auditing` (see `git log`) |
+| 5 | Payments & money | next — waiting for your go-ahead | |
 | 6 | AI / RAG | | |
 | 7 | S3, i18n, GraphQL, OpenAPI, Postman | | |
 | 8 | Frontend (Thymeleaf) | | |
 | 9 | Ship: seeder, Docker, Render | | |
 
-**Numbers after Phase 3:** 131 automated tests (80 unit, 51 integration against real
-Postgres and Redis), all passing. Ten REST endpoints: five for listings and five for
-bookings. Double bookings are impossible even under concurrent requests, and the app keeps
-working when Redis is down.
+**Numbers after Phase 4:** 162 automated tests (94 unit, 68 integration against real
+Postgres and Redis), all passing. Sixteen REST endpoints: listings (with their history),
+bookings and reviews. Every change to a listing, booking or review is recorded with who
+made it; every log line carries its request id; a nightly job retires expired listings.
 
 Commit ids changed on 15 Sep 2026, when the history was rewritten (see the log). Older
 notes may still mention the previous ids.
@@ -42,21 +42,21 @@ notes may still mention the previous ids.
 
 ## 2. Your to-do list
 
-### Before Phase 4 (recommended)
+### Before Phase 5 (recommended)
 - [ ] Work through the **[hands-on guide](hands-on-guide.md)**.
-  - Parts 0–17 cover Phases 1 and 2 (about 45 minutes), if you haven't done them yet.
-  - **Parts 18–26 are new** (about 30 minutes): book, cancel and see every booking
-    error; race two bookings yourself; hold a real database lock in psql to watch a booking
-    wait, retry and charge the new price; then watch the database refuse an overlap the app
-    couldn't see.
-- [x] **GitHub:** PRs #1 and #2 are merged, the history has been cleaned up, and the old
-      branches are deleted (15 Sep). Nothing left to do.
+  - Parts 0–26 cover Phases 1–3, if you haven't done them yet.
+  - **Parts 28–34 are new** (about 30 minutes): see every request's id, read a listing's
+    history, look inside the audit tables, write and edit a review, watch the nightly job
+    run (set to every minute), and switch the logs to JSON.
+- [ ] **GitHub:** Phase 4 is committed on the branch `phase-4-auditing` and not pushed.
+      When you want it on GitHub, say so and I'll push it and open its pull request.
 
 ### Reading
-- [ ] [03 — Bookings and concurrency](03-bookings.md), and answer its interview questions
-      out loud. Rehearse "how do you prevent double bookings?" until the answer is smooth.
-- [ ] The Phase 3 videos in [section 6](#6-youtube-study-plan--every-phase)
-- [ ] If not done yet: [02 — Caching](02-caching.md) and the Phase 2 videos
+- [ ] [04 — Auditing, logging and scheduling](04-auditing.md), and answer its interview
+      questions out loud. "What can't Envers see?" is the one that separates a good answer
+      from a great one.
+- [ ] The Phase 4 videos in [section 6](#6-youtube-study-plan--every-phase)
+- [ ] If not done yet: [03 — Bookings and concurrency](03-bookings.md) and the Phase 3 videos
 
 ### Still open from Phase 1
 - [ ] If not done yet: `docker compose down -v` once (old draft V1 in your local volume),
@@ -65,6 +65,69 @@ notes may still mention the previous ids.
 ---
 
 ## 3. Log
+
+### Session 4 — Phase 4: auditing, logging & scheduling (15 Sep 2026)
+
+**Built**
+- **Auditing with Hibernate Envers:**
+  - `@Audited` on Property (and every subtype), Booking and Review;
+  - V2 creates `revinfo` and the `_aud` tables, with SQL copied from Hibernate's own
+    generated schema;
+  - a custom revision entity (`Revision`) records **who** made each change: `user:<id>`,
+    `system:<job>` or `anonymous`. It comes from `AuditActor`, which `RequestIdFilter` sets
+    per request and jobs set for their own work;
+  - not audited: images, the version, `updatedAt`; users are referenced by id only.
+- **Listing history:**
+  - `GET /api/properties/{id}/history` (host only, readable after deletion);
+  - consecutive Envers snapshots are compared field by field, prices by value;
+  - an empty list for listings with no history.
+- **Structured logging:**
+  - every event log uses SLF4J's fluent API with key/value pairs;
+  - the MDC carries `requestId` and `userId` (or `job`);
+  - locally the console prints `key=value`, just as before; the `render` profile writes ECS
+    JSON;
+  - every response carries `X-Request-Id`, and a caller's id is kept only if it is safe
+    (it can't forge log lines).
+- **StaleListingJob:**
+  - runs at 03:15 UTC daily (`STALE_LISTINGS_CRON`, `"-"` disables);
+  - deactivates active listings whose last day has passed, one transaction per listing,
+    through the new `PropertyService.deactivate`;
+  - logs each listing and a summary.
+- **Reviews API:**
+  - create, list, read, edit and delete;
+  - only guests whose stay has ended may review, once, which a unique constraint in V2
+    backs up;
+  - rating 1–5.
+- **Refactors:**
+  - `ConstraintViolations` recognises a named constraint in any wrapped exception, and the
+    overlap check now uses it;
+  - the job's repository query returns ids.
+- **Tests:** 31 new.
+  - Unit: `AuditActorTest`, `RequestIdFilterTest`, `ListingHistoryServiceTest`,
+    `ConstraintViolationsTest`, `StaleListingJobScheduleTest`, and a new check in
+    `PropertyFactoryTest`.
+  - Integration: `ListingHistoryApiTest`, `StaleListingJobTest`, `ReviewApiTest`,
+    `StructuredLoggingTest`.
+- **Docs:**
+  - [04 — Auditing, logging and scheduling](04-auditing.md);
+  - hands-on guide Parts 28–34;
+  - review samples in `samples/api/`;
+  - README and CLAUDE.md.
+
+**Judgement calls (explained before coding)**
+- A reviews API arrived now, because the spec audits and logs reviews and nothing created
+  them. The rules: finished stays only, one per guest.
+- What isn't audited, and why (see D39).
+- History is for the host only, and survives deletion.
+- All event logs changed style, not just bookings and reviews.
+- JSON logs only in the render profile.
+- No distributed lock for the job (one instance; ShedLock documented).
+
+**Verified by hand** against throwaway containers, every step of Parts 28–34:
+- the job ran at the top of the minute, and its history entry names it;
+- the JSON log line was captured from a second instance.
+
+**Result:** 162/162 tests passing (94 unit, 68 integration).
 
 ### 15 Sep 2026 — GitHub housekeeping
 
@@ -317,6 +380,14 @@ Why each non-obvious choice was made. Interviewers love "why".
 | D35 | "Today" comes from an injected `Clock` (the JVM's zone) | rules can be tested with a fixed date; agrees with `@FutureOrPresent` |
 | D36 | `InvalidRequestException` (400 + field) as the base for every rule violation | one handler for listing and booking rules |
 | D37 | No AI co-author or attribution lines in commits or PR descriptions; history rewritten to remove the existing ones (15 Sep) | your choice: the repository's contributors should be you alone |
+| D38 | A custom Envers revision entity with `changed_by`, filled from a ThreadLocal `AuditActor` | "who" is the first question a history answers; the listener isn't a Spring bean, and runs on the transaction's thread |
+| D39 | Not audited: images, `version`, `updatedAt`; users are referenced by id | images arrive in Phase 7; the version is bookkeeping; the revision has the time; users have no history |
+| D40 | The V2 audit SQL is copied from Hibernate's generated schema; history tables are permissive | validation must pass exactly; history outlives rows and old rules |
+| D41 | The listing history is a diff of consecutive snapshots, host only, readable after deletion, empty (not 404) when never audited | readers want what changed; a deleted listing's owner still needs its history |
+| D42 | A reviews API in Phase 4: finished stays only, one per guest (check + unique constraint) | the spec audits and logs reviews; the stay rule stops fake reviews |
+| D43 | Structured logging with SLF4J key/value pairs and the MDC; `key=value` locally, ECS JSON on Render; every event log converted | one searchable style; the local look (and the hands-on guide) unchanged |
+| D44 | A caller's `X-Request-Id` is kept only if it matches `[A-Za-z0-9._-]{1,64}`, otherwise 8 random hex characters | follow an id across systems, without letting a caller forge log lines |
+| D45 | StaleListingJob: configurable cron (03:15 UTC), one transaction per listing through PropertyService, no distributed lock | failures isolated; caches and history stay correct; a single instance for now |
 
 ---
 
@@ -344,6 +415,11 @@ Each of these is a good "tell me about a problem you solved" story.
 | 5.16 | A GitHub push kept failing with "Repository not found" | the remote had been added with the placeholder `YOUR-USERNAME` | `git remote set-url origin` with the real address |
 | 5.17 | The race test failed on its 2nd run: `CannotAcquireLockException … deadlock detected` (SQLState 40P01) | an exclusion constraint adds its index entry *first* and then checks for conflicts. Two overlapping inserts at the same instant each found the other's uncommitted entry and waited for it, and Postgres cancelled one | retry every `ConcurrencyFailureException` (version race **and** deadlock), not only optimistic failures; the retry sees the survivor and answers correctly. Pinned by `deadlockVictimIsRetried`; the race test has passed repeatedly since |
 | 5.18 | The retry unit tests couldn't build their `RetryTemplate`: `Invalid maxDelay (0ms)` | Framework 7's `RetryPolicy` accepts a zero delay but requires a positive `maxDelay` | the tests use 1 ms |
+| 5.20 | After V2, `PersistenceMappingTest` failed: expected schema version "1", but was "2" | the test hard-coded the latest migration | it now checks "no migration pending, the latest is current", which survives every future migration |
+| 5.21 | A test comparing `reviews_aud.revtype` failed with the baffling "expected [0, 1, 2] but was [0, 1, 2]" | the test expected `Short` values; the Postgres driver returns `SMALLINT` as `Integer`, and AssertJ prints both the same | compare with ints. Lesson: equal-looking values can differ in type |
+| 5.22 | The "readable history" PowerShell command printed empty fields | Windows PowerShell 5.1's `Invoke-RestMethod` passes a JSON array down the pipeline as one object | wrap the call in parentheses so the array is unrolled; the guide says why |
+| 5.23 | The job's history entry also showed `availableUntil` changing (not a bug, a lesson) | the date had been set with plain SQL, which Envers never sees, so the next audited change swept it up | kept in the guide on purpose; production code changes data only through the services |
+| 5.24 | A listing with no history rows answered "There is no listing with id N" | an empty history was treated as "no listing" | it now checks the listing exists, then returns an empty list (host only); tested |
 | 5.19 | The history rewrite was undone right after it ran | the recovery command (`git reset --hard refs/original/…`), meant only for when a check failed, was listed with a Run button among the steps and got run | `git reflog` still listed the rewritten `main` (`5305753`), so `git reset --hard 5305753` and a force-push restored it. Lesson: Git rarely loses a commit, because the reflog records every position a branch has had |
 
 ---
@@ -357,7 +433,7 @@ Each of these is a good "tell me about a problem you solved" story.
 - Spring Boot 3 videos are fine for concepts: Boot 4 mostly renamed packages and
   dependencies.
 - Tick the box when you can explain the "you should be able to" line without notes.
-- Watch **Foundations** and **Phases 1–3** now; each later phase's list just before or
+- Watch **Foundations** and **Phases 1–4** now; each later phase's list just before or
   during that phase.
 
 **Channels that cover these topics well:** Amigoscode · Java Brains · Dan Vega ·
@@ -435,11 +511,17 @@ ByteByteGo (system-design concepts) · Fireship (quick overviews) · TechWorld w
 
 ### Phase 4 — Auditing, logging, scheduling
 - [ ] [hibernate envers tutorial](https://www.youtube.com/results?search_query=hibernate+envers+tutorial) — audit tables and revisions
+- [ ] [database audit trail design](https://www.youtube.com/results?search_query=database+audit+trail+design) — what to record, and what an audit trail misses
+- [ ] [audit log vs event sourcing](https://www.youtube.com/results?search_query=audit+log+vs+event+sourcing) — history beside the data, or history *as* the data
 - [ ] [spring boot scheduled tasks](https://www.youtube.com/results?search_query=spring+boot+scheduled+tasks+cron) — `@Scheduled`
-- [ ] [cron expression explained](https://www.youtube.com/results?search_query=cron+expression+explained) — read `0 0 3 * * *`
-- [ ] [structured logging spring boot](https://www.youtube.com/results?search_query=structured+logging+spring+boot) — why key=value/JSON logs
-- [ ] [slf4j logback tutorial](https://www.youtube.com/results?search_query=slf4j+logback+tutorial) — log levels
+- [ ] [cron expression explained](https://www.youtube.com/results?search_query=cron+expression+explained) — read `0 15 3 * * *` (Spring adds a seconds field)
+- [ ] [shedlock spring boot](https://www.youtube.com/results?search_query=shedlock+spring+boot) — one instance runs the job when there are several
+- [ ] [structured logging spring boot](https://www.youtube.com/results?search_query=structured+logging+spring+boot) — why key=value and JSON logs
+- [ ] [slf4j logback tutorial](https://www.youtube.com/results?search_query=slf4j+logback+tutorial) — log levels, appenders, patterns
+- [ ] [slf4j 2 fluent api key value](https://www.youtube.com/results?search_query=slf4j+2+fluent+api+key+value) — `log.atInfo().addKeyValue(...)`
 - [ ] [mdc logging java](https://www.youtube.com/results?search_query=mdc+logging+java) — attaching a request id to every log line
+- [ ] [correlation id logging](https://www.youtube.com/results?search_query=correlation+id+logging+microservices) — following one request across systems
+- [ ] [log injection attack](https://www.youtube.com/results?search_query=log+injection+attack) — why the request-id filter refuses odd ids
 
 ### Phase 5 — Payments & money
 - [ ] [stripe payment intents tutorial](https://www.youtube.com/results?search_query=stripe+payment+intents+tutorial) — the payment lifecycle
@@ -540,3 +622,8 @@ Run these from `C:\dev\rentalhub`.
 | Every booking in the database | `docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT id, property_id, guest_id, check_in, check_out, status, total_amount FROM bookings ORDER BY id;"` |
 | Who is waiting for a lock (inside psql) | `SELECT pid, wait_event_type, wait_event, query FROM pg_stat_activity WHERE wait_event_type = 'Lock';` |
 | Run only the concurrency tests | `.\mvnw.cmd test "-Dtest=BookingConcurrencyTest"` |
+| Run the stale-listing job every minute (this window only; set before starting the app) | `$env:STALE_LISTINGS_CRON = "0 * * * * *"` |
+| JSON logs instead of plain text (set before starting the app) | `$env:LOGGING_STRUCTURED_FORMAT_CONSOLE = "ecs"` |
+| Undo either of the above | `Remove-Item Env:STALE_LISTINGS_CRON` / `Remove-Item Env:LOGGING_STRUCTURED_FORMAT_CONSOLE` |
+| A listing's history, readable | `(Invoke-RestMethod http://localhost:8081/api/properties/1/history -Headers @{ "X-Demo-User-Id" = "1" }) \| Format-List` |
+| Every audited transaction (inside psql) | `SELECT rev, to_timestamp(revtstmp / 1000.0) AS changed_at, changed_by FROM revinfo ORDER BY rev;` |
