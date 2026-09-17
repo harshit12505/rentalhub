@@ -5,6 +5,7 @@ import com.rentalhub.domain.model.Property;
 import com.rentalhub.domain.model.enums.BookingStatus;
 import com.rentalhub.exception.ConflictException;
 import com.rentalhub.exception.InvalidRequestException;
+import com.rentalhub.exception.OperationNotAllowedException;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -57,10 +58,26 @@ class BookingRules {
         }
     }
 
-    /** A booking can be cancelled until its stay starts: on check-in day, but not after. */
+    /**
+     * A booking can be cancelled until its stay starts: on check-in day, but not after. Not
+     * while its payment is still being decided, though: cancelling then would race the
+     * payment's own outcome, and the reconciliation job settles it within minutes.
+     */
     void checkCancellable(Booking booking) {
+        if (booking.getStatus() == BookingStatus.PENDING) {
+            throw new ConflictException("booking.cancel.paymentPending");
+        }
         if (booking.getStatus() == BookingStatus.COMPLETED || booking.getCheckIn().isBefore(today())) {
             throw new ConflictException("booking.cancel.tooLate");
+        }
+    }
+
+    /** The guest who made a booking and the listing's host may see and cancel it; nobody else. */
+    void checkVisibleTo(Booking booking, long actingUserId) {
+        boolean isGuest = booking.getGuest().getId() == actingUserId;
+        boolean isHost = booking.getProperty().getHost().getId() == actingUserId;
+        if (!isGuest && !isHost) {
+            throw new OperationNotAllowedException("booking.notYours");
         }
     }
 

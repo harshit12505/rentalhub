@@ -1,12 +1,15 @@
 # Hands-on guide: test RentalHub yourself
 
-Everything built so far (Phases 1–4), tested by you, step by step. Each step has the
+Everything built so far (Phases 1–5), tested by you, step by step. Each step has the
 exact PowerShell command and what you should see. Every command and expected output here
 was run and checked against a fresh database: Parts 0–17 on 13 Sep 2026, Parts 18–26 on
-14 Sep 2026, Parts 28–34 on 15 Sep 2026.
+14 Sep 2026, Parts 28–34 on 15 Sep 2026, and Parts 36–44 on 16 Sep 2026. Phase 5 changed
+what some earlier parts print (bookings are now paid for, cache keys gained a currency),
+so those parts were run again on 16 Sep 2026 and updated.
 
 **Time:** about 45 minutes for Parts 0–17 (Phases 1–2), 30 more for Parts 18–26
-(Phase 3), and 30 more for Parts 28–34 (Phase 4). **You'll use three PowerShell windows:**
+(Phase 3), 30 more for Parts 28–34 (Phase 4), and 30 more for Parts 36–44 (Phase 5).
+**You'll use three PowerShell windows:**
 
 | Window | Used for |
 |---|---|
@@ -55,8 +58,8 @@ the ones written here.)
 .\mvnw.cmd test
 ```
 
-✅ Near the end: `Tests run: 162, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS`.
-It takes about a minute: the test suite starts its own throwaway Postgres and Redis in
+✅ Near the end: `Tests run: 269, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS`.
+It takes a minute or two: the test suite starts its own throwaway Postgres and Redis in
 Docker.
 
 Run just one test class:
@@ -117,14 +120,22 @@ You're now in `psql`, Postgres's own shell (the prompt is `rentalhub=#`). Type:
 \dt
 ```
 
-✅ 7 tables: `bookings`, `favorites`, `flyway_schema_history`, `properties`,
-`property_images`, `reviews`, `users`.
+✅ 11 tables: `bookings`, `bookings_aud`, `favorites`, `flyway_schema_history`,
+`properties`, `properties_aud`, `property_images`, `reviews`, `reviews_aud`, `revinfo`,
+`users`. (The `_aud` tables and `revinfo` hold the audit history, from Phase 4.)
 
 ```
 SELECT version, description, success FROM flyway_schema_history;
 ```
 
-✅ One row: `1 | initial schema | t`. Flyway ran V1 exactly once.
+✅ Three rows, one per migration, each run exactly once:
+```
+ version |          description           | success
+---------+--------------------------------+---------
+ 1       | initial schema                 | t
+ 2       | auditing and review uniqueness | t
+ 3       | payments                       | t
+```
 
 ```
 \d bookings
@@ -199,7 +210,8 @@ only once.** The second read never reached the database.
 You'll notice the read shows `"pricePerNight":12000.0000` and `"plotAreaSqm":450.00`,
 where creating it showed `12000` and `450`. Same values: the database stores 4 decimals
 for money and 2 for areas, and `BigDecimal` keeps the number of decimals it was given.
-Phase 5 formats money properly for display.
+The last field, `"displayPrice":null`, is the price converted into a currency you ask for,
+and you didn't ask for one (Part 42).
 
 ---
 
@@ -234,6 +246,11 @@ curl.exe -s "http://localhost:8081/api/properties"
 ✅ `"totalElements":2`, newest first: apartment, then villa.
 
 ✅ Window 1 shows **4** search `cache.miss` lines for these **5** searches.
+
+✅ The `maxPrice` search also logs
+`fx.rates.loaded asOf=… currencies=[INR, USD, EUR, GBP, AED]`. Since Phase 5 a price limit
+is compared with listings in every currency, so the app fetched today's exchange rates. It
+keeps them for an hour.
 
 ---
 
@@ -276,25 +293,31 @@ Case 8 is the first command with the `-H "X-Demo-User-Id: 1"` part removed.
 docker exec rentalhub-redis redis-cli --scan --pattern "rentalhub:*"
 ```
 
-✅ One listing key and four search keys, one per *distinct* search from Part 8:
+✅ One listing key and four search keys, one per *distinct* search from Part 8 (Redis
+lists them in no particular order):
 ```
-rentalhub:v1:propertyById::1
-rentalhub:v1:propertySearch::city:goa|guests:|maxPrice:|page:0|size:20
-rentalhub:v1:propertySearch::city:|guests:6|maxPrice:|page:0|size:20
-rentalhub:v1:propertySearch::city:|guests:|maxPrice:3000|page:0|size:20
-rentalhub:v1:propertySearch::city:|guests:|maxPrice:|page:0|size:20
+rentalhub:v2:propertyById::1
+rentalhub:v2:propertySearch::city:goa|guests:|maxPrice:|currency:|page:0|size:20
+rentalhub:v2:propertySearch::city:|guests:6|maxPrice:|currency:|page:0|size:20
+rentalhub:v2:propertySearch::city:|guests:|maxPrice:3000|currency:INR|page:0|size:20
+rentalhub:v2:propertySearch::city:|guests:|maxPrice:|currency:|page:0|size:20
 ```
 (Search pages expire after 5 minutes, so if you're slow some may already be gone. That's
 the TTL doing its job.)
 
+Two things in these keys are from Phase 5:
+- **`v2`**: the cached records gained a field (`displayPrice`), so the key prefix moved on
+  from `v1`. New code never reads old-shaped JSON.
+- **`currency:INR`**: a price limit now has a currency. Without one it's read as rupees.
+
 ```powershell
-docker exec rentalhub-redis redis-cli GET "rentalhub:v1:propertyById::1"
+docker exec rentalhub-redis redis-cli GET "rentalhub:v2:propertyById::1"
 ```
 
 ✅ The villa as JSON: this is literally what the cache holds.
 
 ```powershell
-docker exec rentalhub-redis redis-cli TTL "rentalhub:v1:propertyById::1"
+docker exec rentalhub-redis redis-cli TTL "rentalhub:v2:propertyById::1"
 ```
 
 ✅ A number just under `600`: seconds until it expires by itself.
@@ -332,11 +355,11 @@ curl.exe -s -i -X PUT http://localhost:8081/api/properties/1 -H "Content-Type: a
 ✅ `HTTP/1.1 200`, `"title":"Sunset villa"`, `"version":1`.
 ✅ Window 3 shows the invalidation, in this order:
 ```
-"DEL" "rentalhub:v1:propertyById::1"
-"SCAN" "0" "MATCH" "rentalhub:v1:propertySearch::city:|*" "COUNT" "1000"
-"DEL" "…city:|guests:6|…" "…city:|guests:|maxPrice:3000|…" "…city:|guests:|maxPrice:|…"
-"SCAN" "0" "MATCH" "rentalhub:v1:propertySearch::city:goa|*" "COUNT" "1000"
-"DEL" "rentalhub:v1:propertySearch::city:goa|guests:|maxPrice:|page:0|size:20"
+"DEL" "rentalhub:v2:propertyById::1"
+"SCAN" "0" "MATCH" "rentalhub:v2:propertySearch::city:|*" "COUNT" "1000"
+"DEL" "…city:|guests:6|…" "…city:|guests:|maxPrice:3000|currency:INR|…" "…city:|guests:|maxPrice:|…"
+"SCAN" "0" "MATCH" "rentalhub:v2:propertySearch::city:goa|*" "COUNT" "1000"
+"DEL" "rentalhub:v2:propertySearch::city:goa|guests:|maxPrice:|currency:|page:0|size:20"
 ```
 That is the listing evicted, the no-city partition flushed, then the Goa partition flushed
 (found with SCAN, never KEYS). Pages for any other city would have been left alone.
@@ -597,18 +620,25 @@ curl.exe -s -i -X POST http://localhost:8081/api/bookings -H "Content-Type: appl
 
 ✅ `HTTP/1.1 201`, `Location: http://localhost:8081/api/bookings/1`, and:
 ```
-{"id":1,"property":{"id":2,"title":"Marina view apartment","city":"Chennai"},"guest":{"id":2,"fullName":"Ravi Kumar"},"checkIn":"2027-03-10","checkOut":"2027-03-13","nights":3,"guests":2,"totalAmount":7500.00,"currency":"INR","status":"CONFIRMED","createdAt":"…"}
+{"id":1,"property":{"id":2,"title":"Marina view apartment","city":"Chennai"},"guest":{"id":2,"fullName":"Ravi Kumar"},"checkIn":"2027-03-10","checkOut":"2027-03-13","nights":3,"guests":2,"totalAmount":7500.00,"currency":"INR","displayTotal":null,"status":"CONFIRMED","payment":{"status":"PAID","provider":"SIMULATED","reference":"sim_pi_…","refundReference":null},"createdAt":"…"}
 ```
 
 - `"nights":3`: the 10th, 11th and 12th. The check-out morning isn't a night.
 - `"totalAmount":7500.00`: 3 × 2,500.00, in the listing's own currency, to 2 decimals.
-- `"CONFIRMED"` straight away: there's no payment step until Phase 5.
+- `"CONFIRMED"` and `"payment":{"status":"PAID",…}`: the booking was paid for (Phase 5).
+  `booking.json` names Stripe's test card `pm_card_visa`. With no Stripe key, the app's
+  payment simulator takes the payment, so `provider` is `SIMULATED` and nothing is really
+  charged. Part 37 looks at payments properly.
 
 ✅ Window 1 shows:
 ```
 cache.invalidated propertyId=2 reason=booking
-booking.created bookingId=1 propertyId=2 guestId=2 checkIn=2027-03-10 checkOut=2027-03-13 total=7500.00 currency=INR
+booking.created bookingId=1 propertyId=2 guestId=2 checkIn=2027-03-10 checkOut=2027-03-13 total=7500.00 currency=INR status=PENDING
+payment.started bookingId=1 provider=SIMULATED reference=sim_pi_… amount=7500.00 currency=INR
+payment.succeeded bookingId=1 provider=SIMULATED reference=sim_pi_… detail=succeeded
 ```
+The booking is created `PENDING`, which already holds the dates, and becomes `CONFIRMED`
+once the payment succeeds.
 
 Now read the apartment again:
 
@@ -665,7 +695,7 @@ curl.exe -s -i -X POST http://localhost:8081/api/bookings -H "Content-Type: appl
 | 2 | `booking-checkout-before-checkin.json` | 400 | `booking.checkOut.beforeCheckIn`, field `checkOut` |
 | 3 | `booking-past-checkin.json` | 400 | `booking.checkIn.past`, field `checkIn` |
 | 4 | `booking-too-long.json` (151 nights) | 400 | `booking.nights.max`: "A single booking can be at most 90 nights." |
-| 5 | `booking-missing-fields.json` | 400 | an `errors` list: `checkIn` and `checkOut` "This field is required.", `guests` "At least one guest must stay." |
+| 5 | `booking-missing-fields.json` | 400 | an `errors` list: `checkIn`, `checkOut` and `paymentMethodId` "This field is required.", `guests` "At least one guest must stay." |
 | 6 | `booking-villa.json` as **user 1** (Asha owns the villa) | 403 | `booking.ownListing`: "You cannot book your own listing." |
 | 7 | `booking-unknown-listing.json` | 404 | `property.notFound`: "There is no listing with id 999." |
 | 8 | `booking.json` with **no** `X-Demo-User-Id` header | 400 | "Required header 'X-Demo-User-Id' is not present." |
@@ -726,11 +756,17 @@ curl.exe -s -i -X POST http://localhost:8081/api/bookings/1/cancel -H "X-Demo-Us
 curl.exe -s -i -X POST http://localhost:8081/api/bookings/1/cancel -H "X-Demo-User-Id: 2"
 ```
 
-✅ `200`, the booking with `"status":"CANCELLED"`. Window 1:
-`booking.cancelled bookingId=1 propertyId=2 byUserId=2`.
+✅ `200`, the booking with `"status":"CANCELLED"` and
+`"payment":{"status":"REFUNDED",…,"refundReference":"sim_re_…"}`. Since Phase 5, cancelling a
+paid booking refunds it in full. Window 1:
+```
+booking.cancelled bookingId=1 propertyId=2 byUserId=2 refundOwed=true
+payment.refunded bookingId=1 provider=SIMULATED refundReference=sim_re_… amount=7500.00 currency=INR
+```
 
-Run the same cancel again. ✅ `200` and the same result, not an error. Cancelling is
-**idempotent**: a client whose connection dropped can simply send it again.
+Run the same cancel again. ✅ `200` and the same result, with the same `refundReference`:
+not an error, and not a second refund. Cancelling is **idempotent**: a client whose
+connection dropped can simply send it again.
 
 **Ravi's dates are free again, and Meera books exactly those (`booking.json`):**
 
@@ -744,19 +780,19 @@ curl.exe -s -i -X POST http://localhost:8081/api/bookings -H "Content-Type: appl
 **What the database holds:**
 
 ```powershell
-docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT id, property_id AS listing, guest_id AS guest, check_in, check_out, status, total_amount FROM bookings ORDER BY id;"
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT id, property_id AS listing, guest_id AS guest, check_in, check_out, status, payment_status, total_amount FROM bookings ORDER BY id;"
 ```
 
 ✅
 ```
- id | listing | guest |  check_in  | check_out  |  status   | total_amount
-----+---------+-------+------------+------------+-----------+--------------
-  1 |       2 |     2 | 2027-03-10 | 2027-03-13 | CANCELLED |    7500.0000
-  2 |       2 |     4 | 2027-03-13 | 2027-03-16 | CONFIRMED |    7500.0000
-  3 |       2 |     4 | 2027-03-10 | 2027-03-13 | CONFIRMED |    7500.0000
+ id | listing | guest |  check_in  | check_out  |  status   | payment_status | total_amount
+----+---------+-------+------------+------------+-----------+----------------+--------------
+  1 |       2 |     2 | 2027-03-10 | 2027-03-13 | CANCELLED | REFUNDED       |    7500.0000
+  2 |       2 |     4 | 2027-03-13 | 2027-03-16 | CONFIRMED | PAID           |    7500.0000
+  3 |       2 |     4 | 2027-03-10 | 2027-03-13 | CONFIRMED | PAID           |    7500.0000
 ```
-The cancelled booking stays on record, as history. The database stores 4 decimals
-(`NUMERIC(19,4)`); the API shows the currency's 2.
+The cancelled booking stays on record, as history, and says where its money went. The
+database stores 4 decimals (`NUMERIC(19,4)`); the API shows the currency's 2.
 
 ---
 
@@ -844,7 +880,9 @@ COMMIT;
 ```
 retry.attempt operation=booking retry=1 cause=ObjectOptimisticLockingFailureException
 cache.invalidated propertyId=2 reason=booking
-booking.created bookingId=… propertyId=2 guestId=2 checkIn=2027-06-10 checkOut=2027-06-13 total=9000.00 currency=INR
+booking.created bookingId=… propertyId=2 guestId=2 checkIn=2027-06-10 checkOut=2027-06-13 total=9000.00 currency=INR status=PENDING
+payment.started bookingId=… provider=SIMULATED reference=sim_pi_… amount=9000.00 currency=INR
+payment.succeeded bookingId=… provider=SIMULATED reference=sim_pi_… detail=succeeded
 ```
 
 What happened, step by step:
@@ -854,6 +892,7 @@ What happened, step by step:
 3. About 50 ms later, the retry started a **new** transaction and read the apartment again
    (₹3,000, version 4).
 4. The retry succeeded.
+5. Only then was the payment taken (Phase 5): once, at the new price.
 
 A booking is never charged from a price that changed underneath it.
 
@@ -907,7 +946,8 @@ INFO  … booking.race.lost propertyId=2 guestId=2 checkIn=2027-07-10 checkOut=2
 ```
 
 The database's own error (SQLState 23P01) became a message the guest can act on. It isn't
-retried: a retry could only say "already booked".
+retried: a retry could only say "already booked". And no card was touched: the payment only
+starts once the dates are safely held.
 
 **The other ending.** In Window 3, start a booking for 10–13 September, then change your mind:
 
@@ -1005,11 +1045,12 @@ Another fresh start, so that every listing's history begins at its creation.
    .\mvnw.cmd spring-boot:run
    ```
 
-   ✅ Among the startup lines, Flyway runs both migrations:
+   ✅ Among the startup lines, Flyway runs every migration (V3 is Phase 5's):
    ```
    Migrating schema "public" to version "1 - initial schema"
    Migrating schema "public" to version "2 - auditing and review uniqueness"
-   Successfully applied 2 migrations to schema "public", now at version v2
+   Migrating schema "public" to version "3 - payments"
+   Successfully applied 3 migrations to schema "public", now at version v3
    ```
    ✅ Then, at the start of every minute (with today's date):
    ```
@@ -1158,12 +1199,16 @@ docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT rev, to
 ```
  rev |         changed_at         | changed_by
 -----+----------------------------+------------
-   1 | 2026-09-15 15:37:32.092+00 | user:1
-   2 | 2026-09-15 15:37:32.291+00 | user:1
-   3 | 2026-09-15 15:37:32.739+00 | user:1
-   4 | 2026-09-15 15:37:32.805+00 | user:1
-   5 | 2026-09-15 15:37:33.662+00 | user:2
+   1 | 2026-09-15 20:41:25.726+00 | user:1
+   2 | 2026-09-15 20:41:26.419+00 | user:1
+   3 | 2026-09-15 20:41:26.669+00 | user:1
+   4 | 2026-09-15 20:41:26.727+00 | user:1
+   5 | 2026-09-15 20:41:27.262+00 | user:2
+   6 | 2026-09-15 20:41:27.287+00 | user:2
+   7 | 2026-09-15 20:41:27.305+00 | user:2
 ```
+Revisions 5–7 are Ravi's one booking: since Phase 5 it's held, its payment recorded, then
+confirmed, each in a transaction of its own (Part 37).
 
 **The villa's history rows, as Envers stores them.** Whole snapshots; the history view
 works out the differences.
@@ -1185,10 +1230,18 @@ docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT rev, re
 **The booking has a history of its own:**
 
 ```powershell
-docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT a.id, a.rev, a.revtype, a.status, r.changed_by FROM bookings_aud a JOIN revinfo r ON r.rev = a.rev ORDER BY a.rev;"
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT a.id, a.rev, a.revtype, a.status, a.payment_status, r.changed_by FROM bookings_aud a JOIN revinfo r ON r.rev = a.rev ORDER BY a.rev;"
 ```
 
-✅ One row: booking `1`, revision `5`, `revtype` `0`, `CONFIRMED`, `user:2`.
+✅
+```
+ id | rev | revtype |  status   | payment_status | changed_by
+----+-----+---------+-----------+----------------+------------
+  1 |   5 |       0 | PENDING   | UNPAID         | user:2
+  1 |   6 |       1 | PENDING   | UNPAID         | user:2
+  1 |   7 |       1 | CONFIRMED | PAID           | user:2
+```
+Created, then changed twice: the payment's id was recorded (revision 6), then it was paid.
 
 ---
 
@@ -1259,8 +1312,8 @@ docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT a.id, a
 ```
  id | rev | revtype | rating | changed_by
 ----+-----+---------+--------+------------
-  1 |   6 |       0 |      5 | user:2
-  1 |   7 |       1 |      4 | user:2
+  1 |   8 |       0 |      5 | user:2
+  1 |   9 |       1 |      4 | user:2
 ```
 
 ---
@@ -1299,7 +1352,7 @@ Look at the last entry in the villa's history:
 
 ✅
 ```
-revision      : 8
+revision      : 10
 type          : UPDATED
 changedBy     : system:stale-listing-job
 changedByName :
@@ -1341,17 +1394,19 @@ can switch your console to the same format.
    curl.exe -s -i -X POST http://localhost:8081/api/bookings -H "Content-Type: application/json" -H "X-Demo-User-Id: 4" -H "X-Request-Id: json-demo-1" --data "@samples/api/booking-back-to-back.json"
    ```
 
-   ✅ `201` and `X-Request-Id: json-demo-1`. In Window 1, one line, shown here broken up to
-   fit:
+   ✅ `201` and `X-Request-Id: json-demo-1`. In Window 1, among that request's lines, this
+   one (shown here broken up to fit):
    ```json
-   {"@timestamp":"2026-09-15T15:40:54.813020100Z","log":{"level":"INFO","logger":"com.rentalhub.service.BookingService"},
-    "process":{"pid":7400,"thread":{"name":"http-nio-8081-exec-2"}},"service":{"name":"rentalhub","version":"1.0.0","node":{}},
+   {"@timestamp":"2026-09-15T20:44:02.718347600Z","log":{"level":"INFO","logger":"com.rentalhub.service.BookingService"},
+    "process":{"pid":21672,"thread":{"name":"http-nio-8081-exec-1"}},"service":{"name":"rentalhub","version":"1.0.0","node":{}},
     "message":"booking.created","userId":"4","requestId":"json-demo-1","bookingId":3,"propertyId":2,"guestId":4,
-    "checkIn":"2027-03-13","checkOut":"2027-03-16","total":7500.00,"currency":"INR","ecs":{"version":"8.11"}}
+    "checkIn":"2027-03-13","checkOut":"2027-03-16","total":7500.00,"currency":"INR","status":"PENDING","ecs":{"version":"8.11"}}
    ```
    The message is just the event's name. Every detail is a field of its own (`bookingId`,
    `total`, …), and so are the request id and user from the MDC. Booking 3, because the
-   past stay you created in Part 32 is booking 2.
+   past stay you created in Part 32 is booking 2. The next two lines, `payment.started` and
+   `payment.succeeded`, carry the same `requestId`: one id follows the whole booking,
+   payment included.
 
 3. Back to normal. Stop the app, clear both settings, and start it again:
 
@@ -1371,7 +1426,454 @@ can switch your console to the same format.
 
 ---
 
-## Part 35 — Clean up
+## Part 35 — (moved)
+
+Clean-up is now at the very end, in Part 45.
+
+---
+
+# Phase 5 — Payments, refunds and currencies (Parts 36–44)
+
+One more fresh start. The payment reconciliation job normally runs every 5 minutes and
+leaves a payment alone for 10 minutes; here you'll make it run every 20 seconds and give up
+waiting after 30, so Part 40 doesn't take a coffee break.
+
+## Part 36 — A fresh start, with payments
+
+1. Stop the app: `Ctrl+C` in Window 1.
+2. In Window 2, wipe the database and start the containers again:
+
+   ```powershell
+   docker compose down -v
+   ```
+
+   ```powershell
+   docker compose up -d
+   ```
+
+3. In Window 1, set the two payment settings, then start the app. They last only as long as
+   this window.
+
+   ```powershell
+   $env:PAYMENT_RECONCILIATION_CRON = "0,20,40 * * * * *"
+   ```
+
+   ```powershell
+   $env:PAYMENT_STALE_AFTER = "30s"
+   ```
+
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   ✅ Flyway runs all three migrations, and then, among the startup lines:
+   ```
+   payments.mode provider=SIMULATED reason=no STRIPE_SECRET_KEY: nothing is charged
+   ```
+   **No Stripe account is needed.** Without a key, payments go to the app's own simulator,
+   which answers to Stripe's test card ids and charges nobody. Every booking it handles says
+   `SIMULATED`, so you can always tell. (With a real test key, the same requests go to
+   Stripe: see [05 — Payments](05-payments.md), "If you get a Stripe test key".)
+
+4. In Window 2, create the same four users and two listings as in Part 18:
+
+   ```powershell
+   docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "INSERT INTO users (full_name, email, role) VALUES ('Asha Menon','asha@example.com','HOST'), ('Ravi Kumar','ravi@example.com','GUEST'), ('Vikram Rao','vikram@example.com','HOST'), ('Meera Iyer','meera@example.com','GUEST') RETURNING id, full_name, role;"
+   ```
+
+   ```powershell
+   curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/villa.json"
+   ```
+
+   ```powershell
+   curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/apartment.json"
+   ```
+
+   ✅ Users 1–4, then `201` twice: listing 1 is the villa, listing 2 the apartment.
+
+---
+
+## Part 37 — Pay for a booking
+
+`samples/api/booking.json` now also says which card to pay with:
+`"paymentMethodId": "pm_card_visa"`. That's Stripe's test card that always succeeds, and the
+simulator answers to it too.
+
+```powershell
+curl.exe -s -i -X POST http://localhost:8081/api/bookings -H "Content-Type: application/json" -H "X-Demo-User-Id: 2" --data "@samples/api/booking.json"
+```
+
+✅ `HTTP/1.1 201`, `Location: …/api/bookings/1`, and:
+```
+{"id":1,"property":{"id":2,…},"guest":{"id":2,"fullName":"Ravi Kumar"},"checkIn":"2027-03-10","checkOut":"2027-03-13","nights":3,"guests":2,"totalAmount":7500.00,"currency":"INR","displayTotal":null,"status":"CONFIRMED","payment":{"status":"PAID","provider":"SIMULATED","reference":"sim_pi_177cdd90cf024873b5de6836","refundReference":null},"createdAt":"…"}
+```
+
+- `"status":"CONFIRMED"` **and** `"payment":{"status":"PAID"}`: the stay is on, and the money
+  is in. They're two different questions, so they're two fields.
+- `"reference":"sim_pi_…"` is the payment's id at the provider. With a real Stripe key it
+  would be `pi_…`, and you could find it in the Stripe dashboard.
+
+✅ Window 1 shows the three steps of the payment:
+```
+booking.created bookingId=1 propertyId=2 guestId=2 checkIn=2027-03-10 checkOut=2027-03-13 total=7500.00 currency=INR status=PENDING
+payment.started bookingId=1 provider=SIMULATED reference=sim_pi_… amount=7500.00 currency=INR
+payment.succeeded bookingId=1 provider=SIMULATED reference=sim_pi_… detail=succeeded
+```
+
+**What the row holds:**
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT id, status, payment_status, payment_provider, payment_reference, total_amount, currency FROM bookings;"
+```
+
+✅
+```
+ id |  status   | payment_status | payment_provider |        payment_reference        | total_amount | currency
+----+-----------+----------------+------------------+---------------------------------+--------------+----------
+  1 | CONFIRMED | PAID           | SIMULATED        | sim_pi_177cdd90cf024873b5de6836 |    7500.0000 | INR
+```
+
+**And its history, one row per transaction:**
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT a.rev, a.status, a.payment_status, a.payment_reference IS NOT NULL AS has_payment, r.changed_by FROM bookings_aud a JOIN revinfo r ON r.rev = a.rev WHERE a.id = 1 ORDER BY a.rev;"
+```
+
+✅
+```
+ rev |  status   | payment_status | has_payment | changed_by
+-----+-----------+----------------+-------------+------------
+   3 | PENDING   | UNPAID         | f           | user:2
+   4 | PENDING   | UNPAID         | t           | user:2
+   5 | CONFIRMED | PAID           | t           | user:2
+```
+
+Read it downwards: the booking was **held** (its dates are now blocked, nothing paid), then
+the payment's id was **recorded**, then it was **paid**. Recording the id before any money
+can move is what makes Part 40 possible.
+
+---
+
+## Part 38 — A card that's declined
+
+`booking-declined.json` asks for 20–23 March with `pm_card_visa_chargeDeclined`.
+
+```powershell
+curl.exe -s -i -X POST http://localhost:8081/api/bookings -H "Content-Type: application/json" -H "X-Demo-User-Id: 2" --data "@samples/api/booking-declined.json"
+```
+
+✅ `HTTP/1.1 402`:
+```
+{"detail":"The card was declined, and nothing was charged. Please try a different card.","instance":"/api/bookings","status":402,"title":"Payment failed","messageKey":"payment.declined"}
+```
+402 Payment Required is the status Stripe itself uses for card errors.
+
+✅ Window 1: `payment.declined bookingId=2 provider=SIMULATED reference=sim_pi_… detail=card_declined`
+
+**The attempt stays on record, cancelled:**
+
+```powershell
+(Invoke-RestMethod http://localhost:8081/api/bookings -Headers @{ "X-Demo-User-Id" = "2" }) | Select-Object id, checkIn, status, @{ n = "payment"; e = { $_.payment.status } } | Format-Table
+```
+
+✅
+```
+id checkIn    status    payment
+-- -------    ------    -------
+ 2 2027-03-20 CANCELLED FAILED
+ 1 2027-03-10 CONFIRMED PAID
+```
+
+Why keep booking 2 at all? Because the provider has a payment attempt that names it, and
+because "why was I not charged?" deserves an answer. It's cancelled, so it holds no dates.
+
+**And the dates are free at once.** Meera takes them:
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8081/api/bookings -H "Content-Type: application/json" -H "X-Demo-User-Id: 4" --data "@samples/api/booking-after-decline.json"
+```
+
+✅ `201` (booking 3), for the very dates the declined attempt had held a second earlier.
+
+---
+
+## Part 39 — Three more ways a payment can fail
+
+Send each as user 2, the same way as above:
+
+| # | File | Expected |
+|---|---|---|
+| 1 | `booking-3ds.json` | `402`, `payment.authenticationRequired`: "This card needs the bank to approve the payment (3-D Secure), which is not supported yet." |
+| 2 | `booking-provider-down.json` | `503` with a `Retry-After: 60` header, `payment.unavailable`: "The payment could not be taken right now, and nothing was charged." |
+| 3 | `booking-card-number.json` | `400`, field `paymentMethodId`: "Give a payment method id, such as pm_card_visa." |
+
+- **3-D Secure** is the bank asking the cardholder to approve the payment. That needs a
+  browser, which this API doesn't have, so the payment is refused cleanly instead of hanging.
+- **The 503** is "not your fault, try again shortly": the provider refused the request, and
+  nothing was charged. `Retry-After` says when.
+- **Case 3 never reaches the provider.** A card number is not a payment-method id; a real
+  client gets its id from Stripe's own form, so card numbers never touch this server.
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT id, check_in, status, payment_status FROM bookings ORDER BY id;"
+```
+
+✅
+```
+ id |  check_in  |  status   | payment_status
+----+------------+-----------+----------------
+  1 | 2027-03-10 | CONFIRMED | PAID
+  2 | 2027-03-20 | CANCELLED | FAILED
+  3 | 2027-03-20 | CONFIRMED | PAID
+  4 | 2027-03-26 | CANCELLED | FAILED
+  5 | 2027-03-26 | CANCELLED | FAILED
+```
+
+Bookings 4 and 5 are the **same dates**: the 3-D Secure attempt released them, so the next
+attempt could have them. No failed payment ever leaves dates blocked.
+
+---
+
+## Part 40 — The answer that never came
+
+The worst case in payments isn't "declined", it's **no answer**: the request timed out, and
+the card may or may not have been charged. The simulator does this on demand with
+`pm_sim_noAnswer` (`booking-no-answer.json`, the villa for 1–6 April): it takes the money and
+"loses" the reply.
+
+```powershell
+curl.exe -s -i -X POST http://localhost:8081/api/bookings -H "Content-Type: application/json" -H "X-Demo-User-Id: 2" --data "@samples/api/booking-no-answer.json"
+```
+
+✅ `HTTP/1.1 202` — **Accepted**, not Created:
+```
+{"id":6,…,"totalAmount":60000.00,"currency":"INR","displayTotal":null,"status":"PENDING","payment":{"status":"UNPAID","provider":"SIMULATED","reference":"sim_pi_…","refundReference":null},"createdAt":"…"}
+```
+✅ Window 1: `payment.undecided bookingId=6 … detail=simulated: the answer was lost`
+
+**The dates stay held**, because the guest may well have paid. Meera tries them:
+
+```powershell
+curl.exe -s -w "\n%{http_code}\n" -X POST http://localhost:8081/api/bookings -H "Content-Type: application/json" -H "X-Demo-User-Id: 4" --data "@samples/api/booking-villa.json"
+```
+
+✅ `409`, `booking.dates.unavailable`.
+
+**And Ravi can't cancel it yet**, because that would race the payment's own outcome:
+
+```powershell
+curl.exe -s -w "\n%{http_code}\n" -X POST http://localhost:8081/api/bookings/6/cancel -H "X-Demo-User-Id: 2"
+```
+
+✅ `409`, `booking.cancel.paymentPending`: "The payment for this booking is still being
+processed. Try again in a few minutes."
+
+**Now wait about a minute** (30 seconds before the booking counts as stuck, then the job's
+next run).
+
+✅ Window 1:
+```
+payment.reconciled bookingId=6 settlement=CONFIRMED detail=succeeded
+job.paymentReconciliation.finished createdBefore=… confirmed=[6] released=[] stillPending=[] refunded=[] refundsStillOwed=[] failed=[] durationMs=44
+```
+The job asked the provider what had happened to `sim_pi_…`, was told "succeeded", and
+finished the booking off.
+
+```powershell
+curl.exe -s http://localhost:8081/api/bookings/6 -H "X-Demo-User-Id: 2"
+```
+
+✅ `"status":"CONFIRMED"`, `"payment":{"status":"PAID",…}`.
+
+**And the history says who did it:**
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT a.rev, a.status, a.payment_status, r.changed_by FROM bookings_aud a JOIN revinfo r ON r.rev = a.rev WHERE a.id = 6 ORDER BY a.rev;"
+```
+
+✅
+```
+ rev |  status   | payment_status |            changed_by
+-----+-----------+----------------+-----------------------------------
+  18 | PENDING   | UNPAID         | user:2
+  19 | PENDING   | UNPAID         | user:2
+  20 | CONFIRMED | PAID           | system:payment-reconciliation-job
+```
+
+In production the job runs every 5 minutes and leaves a payment alone for 10, which is far
+longer than any live payment can take. Its quiet runs (nothing to do) are logged at `DEBUG`,
+so you'll see them in this window but not on a real server.
+
+---
+
+## Part 41 — Cancel, and get your money back
+
+```powershell
+curl.exe -s -i -X POST http://localhost:8081/api/bookings/1/cancel -H "X-Demo-User-Id: 2"
+```
+
+✅ `200`, with `"status":"CANCELLED"`, `"payment":{"status":"REFUNDED",…,"refundReference":"sim_re_…"}`.
+
+✅ Window 1:
+```
+booking.cancelled bookingId=1 propertyId=2 byUserId=2 refundOwed=true
+payment.refunded bookingId=1 provider=SIMULATED refundReference=sim_re_… amount=7500.00 currency=INR
+```
+
+The cancellation is committed first (the dates are free immediately), and the refund is asked
+for after it. If the refund had failed, the booking would stay `CANCELLED` with its payment
+still `PAID` — a refund owed — and the reconciliation job would try again.
+
+Run the same cancel again:
+
+```powershell
+curl.exe -s -X POST http://localhost:8081/api/bookings/1/cancel -H "X-Demo-User-Id: 2"
+```
+
+✅ The same answer, with the **same** `refundReference`. No second refund: each step of a
+payment carries an idempotency key, so repeating it is safe.
+
+---
+
+## Part 42 — Prices in another currency
+
+```powershell
+curl.exe -s "http://localhost:8081/api/properties/2?currency=USD"
+```
+
+✅ The apartment, with its own price untouched and a converted one beside it:
+```
+…"pricePerNight":2500.0000,"currency":"INR",…,"displayPrice":{"amount":26.04,"currency":"USD","rate":0.010414,"ratesAsOf":"2026-09-17T00:02:31Z"}
+```
+Your numbers will differ: these are real rates, updated once a day.
+
+✅ Window 1, the first time only:
+`fx.rates.loaded asOf=… currencies=[INR, USD, EUR, GBP, AED]`. The rates are then kept for an
+hour.
+
+**Two listings priced abroad**, by Vikram (user 3):
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 3" --data "@samples/api/studio-dubai.json"
+```
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 3" --data "@samples/api/apartment-london.json"
+```
+
+✅ `201` twice: listing 3 is a studio at **AED 300**, listing 4 a flat at **£95**.
+
+**"Under $100 a night", wherever they're priced:**
+
+```powershell
+(Invoke-RestMethod "http://localhost:8081/api/properties?maxPrice=100&currency=USD").content | Select-Object id, title, pricePerNight, currency, @{ n = "inUSD"; e = { $_.displayPrice.amount } } | Format-Table
+```
+
+✅
+```
+id title                 pricePerNight currency inUSD
+-- -----                 ------------- -------- -----
+ 3 Marina studio              300.0000 AED      81.69
+ 2 Marina view apartment     2500.0000 INR      26.04
+```
+The villa (₹12,000 ≈ $125) and the London flat (£95 ≈ $128) are over the limit. Before
+Phase 5 this filter compared the bare numbers, so "under 100" meant 100 of whatever each
+listing was priced in.
+
+**Raise it to $150:**
+
+```powershell
+(Invoke-RestMethod "http://localhost:8081/api/properties?maxPrice=150&currency=USD").content | Select-Object id, title, pricePerNight, currency, @{ n = "inUSD"; e = { $_.displayPrice.amount } } | Format-Table
+```
+
+✅ All four, newest first: the London flat ($127.53), the studio ($81.69), the apartment
+($26.04) and the villa ($124.97).
+
+**Without a currency, `maxPrice` is in rupees**, and nothing is converted for display:
+
+```powershell
+(Invoke-RestMethod "http://localhost:8081/api/properties?maxPrice=10000").content | Select-Object id, title, pricePerNight, currency, displayPrice | Format-Table
+```
+
+✅ The studio (AED 300 ≈ ₹7,800) and the apartment, with an empty `displayPrice` column. Old
+searches keep meaning exactly what they meant.
+
+**The currency is part of the cache key**, so "100 dollars" and "100 rupees" are different
+searches:
+
+```powershell
+docker exec rentalhub-redis redis-cli --scan --pattern "rentalhub:v2:propertySearch*"
+```
+
+✅
+```
+rentalhub:v2:propertySearch::city:|guests:|maxPrice:10000|currency:INR|page:0|size:20
+rentalhub:v2:propertySearch::city:|guests:|maxPrice:100|currency:USD|page:0|size:20
+rentalhub:v2:propertySearch::city:|guests:|maxPrice:150|currency:USD|page:0|size:20
+```
+
+---
+
+## Part 43 — A converted total is shown, never stored
+
+Ravi books the London flat and asks to see the total in rupees as well:
+
+```powershell
+curl.exe -s -i -X POST "http://localhost:8081/api/bookings?currency=INR" -H "Content-Type: application/json" -H "X-Demo-User-Id: 2" --data "@samples/api/booking-london.json"
+```
+
+✅ `201`:
+```
+…"totalAmount":285.00,"currency":"GBP","displayTotal":{"amount":36736.59,"currency":"INR","rate":128.900327,"ratesAsOf":"…"},…
+```
+3 nights at £95. The charge is £285; the rupee figure is only for reading.
+
+Ask for the same booking in dollars:
+
+```powershell
+curl.exe -s "http://localhost:8081/api/bookings/7?currency=USD" -H "X-Demo-User-Id: 2"
+```
+
+✅ `"totalAmount":285.00,"currency":"GBP"` again, with `"displayTotal":{"amount":382.59,"currency":"USD",…}`.
+Same stored amount, a different view of it, worked out for this request.
+
+**What the database holds:**
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT id, total_amount, currency FROM bookings WHERE id = 7;"
+```
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT DISTINCT total_amount, currency FROM bookings_aud WHERE id = 7;"
+```
+
+✅ Both say `285.0000 | GBP`. Not a rupee or a dollar figure anywhere, in the row or in its
+history. Exchange rates move; what was charged doesn't.
+
+---
+
+## Part 44 — The money maths, in one test
+
+```powershell
+.\mvnw.cmd test "-Dtest=MoneyMathTest"
+```
+
+✅ `Tests run: 9, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS`.
+
+Open `src/test/java/com/rentalhub/domain/model/MoneyMathTest.java`. Each test is a way
+`double` gets money wrong, next to the exact answer the app uses:
+
+- three nights at ₹2,499.99 add up to `7499.969999999999`, not ₹7,499.97;
+- 30 nights at ₹1,299.90 come to `38997.00000000002`;
+- `(long) (2499.99 * 100)` is `249998` paise: **the guest is charged a paisa less than they
+  were shown**. `Currency.toMinorUnits` gives 249999, and refuses to round;
+- `new BigDecimal(0.1)` is `0.1000000000000000055511…`, which is why money is built from
+  strings;
+- `equals` says `2500.0000` ≠ `2500.00`, which is why money is compared with `compareTo`.
+
+---
+
+## Part 45 — Clean up
 
 - Stop the app: `Ctrl+C` in Window 1 (or ⏹ in IntelliJ).
 - Stop the containers but keep the data:
@@ -1387,7 +1889,7 @@ can switch your console to the same format.
 
 ## What you just proved
 
-- [ ] All 162 automated tests pass on your machine
+- [ ] All 269 automated tests pass on your machine
 - [ ] Flyway built the schema; the double-booking rule and CHECK constraints are in Postgres
 - [ ] The factory builds each type and enforces each type's rules (400s with the field)
 - [ ] Permissions: guests can't create; only the owner edits (403s)
@@ -1414,6 +1916,14 @@ can switch your console to the same format.
 - [ ] The nightly job deactivated an expired listing, and the history names the job
 - [ ] A change made with plain SQL is invisible to the audit trail until the next audited change
 - [ ] The same events logged as JSON, each detail its own field
+- [ ] A booking is held first, its payment's id recorded, and only then is it paid and confirmed
+- [ ] A declined card gives the dates back at once, and the attempt stays on record
+- [ ] A card needing 3-D Secure, and a provider that refuses, are answered cleanly (402, 503 with `Retry-After`), with nothing charged
+- [ ] A payment whose answer was lost leaves the booking pending and its dates held, until the job settles it, recorded as the job
+- [ ] Cancelling a paid booking refunds it in full, and cancelling twice doesn't refund twice
+- [ ] "Under $100" compares listings priced in rupees, dirhams and pounds, each in its own currency
+- [ ] A converted total is shown but never stored: the row and its history stay in the listing's currency
+- [ ] `double` gets a three-night total wrong, and loses a paisa converting to the smallest unit; `BigDecimal` doesn't
 
 ---
 
@@ -1438,6 +1948,11 @@ can switch your console to the same format.
 | Part 33: nothing happens at the start of the minute | `STALE_LISTINGS_CRON` wasn't set in Window 1 before the app started | `Ctrl+C`, set it (Part 28, step 3), start again |
 | A listing's history is `[]` | the listing was created before Phase 4 and hasn't changed since | redo Part 28, or change the listing once |
 | `Remove-Item : Cannot find path 'Env:…'` (Part 34) | that setting wasn't set in this window | harmless; carry on |
+| A booking is refused with `paymentMethodId` "This field is required." | an older copy of the `samples/api/booking*.json` files | they all carry `"paymentMethodId": "pm_card_visa"` since Phase 5; add it if yours doesn't |
+| Part 40: the booking is still `PENDING` after a minute | `PAYMENT_RECONCILIATION_CRON` and `PAYMENT_STALE_AFTER` weren't set in Window 1 *before* the app started | `Ctrl+C`, set them (Part 36, step 3), start again |
+| Part 42: `"displayPrice":null` and `"exchangeRatesUnavailable":true` | the app couldn't reach the exchange-rate provider (no internet, or its rate limit) | it tries again a minute later; prices in their own currency still work |
+| Part 42–43: your converted figures differ from the guide's | exchange rates change every day | expected: only the shape of the answer matters |
+| A reference starts `sim_pi_` where you expected `pi_` | no `STRIPE_SECRET_KEY`, so the simulator took the payment | that's the default; [05 — Payments](05-payments.md) shows how to use a real test key |
 
 **Tip:** to see a JSON response nicely indented, pipe it through PowerShell:
 `curl.exe -s http://localhost:8081/api/properties/1 | ConvertFrom-Json | ConvertTo-Json -Depth 5`

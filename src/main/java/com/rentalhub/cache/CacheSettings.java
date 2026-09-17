@@ -20,7 +20,7 @@ import java.time.Duration;
  */
 @ConfigurationProperties("rentalhub.cache")
 public record CacheSettings(
-        @DefaultValue("rentalhub:v1:") String keyPrefix,
+        @DefaultValue("rentalhub:v2:") String keyPrefix,
         @DefaultValue("30s") Duration listingLocalTtl,
         @DefaultValue("10000") long listingLocalMaxSize,
         @DefaultValue("10m") Duration listingSharedTtl,

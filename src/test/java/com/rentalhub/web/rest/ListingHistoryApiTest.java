@@ -92,15 +92,17 @@ class ListingHistoryApiTest extends IntegrationTest {
         LocalDate checkIn = LocalDate.now().plusDays(30);
         mvc.perform(post("/api/bookings").header(HEADER, guestId).contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"propertyId": %d, "checkIn": "%s", "checkOut": "%s", "guests": 2}
+                                {"propertyId": %d, "checkIn": "%s", "checkOut": "%s", "guests": 2,
+                                 "paymentMethodId": "pm_card_visa"}
                                 """.formatted(id, checkIn, checkIn.plusDays(2))))
                 .andExpect(status().isCreated());
 
         mvc.perform(get("/api/properties/{id}/history", id).header(HEADER, hostId))
                 .andExpect(jsonPath("$", hasSize(1)));
-        // The booking has a history of its own, recorded as the guest's doing.
+        // The booking has a history of its own (held, payment started, paid), all of it
+        // recorded as the guest's doing.
         String bookedBy = jdbc.queryForObject(
-                "SELECT r.changed_by FROM bookings_aud a JOIN revinfo r ON r.rev = a.rev", String.class);
+                "SELECT DISTINCT r.changed_by FROM bookings_aud a JOIN revinfo r ON r.rev = a.rev", String.class);
         org.assertj.core.api.Assertions.assertThat(bookedBy).isEqualTo("user:" + guestId);
     }
 

@@ -3,7 +3,6 @@ package com.rentalhub.service;
 import com.rentalhub.config.RetryConfig;
 import com.rentalhub.domain.model.Booking;
 import com.rentalhub.domain.model.Property;
-import com.rentalhub.domain.model.enums.BookingStatus;
 import com.rentalhub.domain.repository.BookingRepository;
 import com.rentalhub.domain.repository.PropertyRepository;
 import com.rentalhub.dto.BookingRequest;
@@ -22,11 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Bookings: making them, viewing them, cancelling them.
+ * Bookings: making and paying for them, viewing them, cancelling them.
  *
- * Making one is the hard part, because "check the calendar, then insert" is a race: two
- * guests can both pass the check before either has inserted. Three layers deal with it,
- * from the outside in:
+ * Making one has two stages. First the dates are held: a PENDING booking is inserted.
+ * Then it is paid for (PaymentService), which turns it CONFIRMED or releases it.
+ *
+ * Holding the dates is the hard part, because "check the calendar, then insert" is a
+ * race: two guests can both pass the check before either has inserted. Three layers deal
+ * with it, from the outside in:
  * <ol>
  *   <li><b>Retry, then recover</b> (here). An attempt that loses a race to another
  *       transaction (a version conflict, or a deadlock that Postgres broke by cancelling
@@ -43,7 +45,8 @@ import java.util.List;
  * </ol>
  * The retry must be outside the transaction. The version check runs while the
  * transaction commits, which is after the transactional method has returned, so a retry
- * inside the transaction would never see it fail.
+ * inside the transaction would never see it fail. The payment is outside it too, and
+ * after it: a network call must never run inside a database transaction.
  */
 @Slf4j
 @Service
@@ -54,34 +57,62 @@ public class BookingService {
     private final BookingRules rules;
     private final BookingRepository bookings;
     private final PropertyRepository properties;
+    private final BookingUpdates updates;
+    private final PaymentService payments;
 
     BookingService(BookingAttempt attempt,
                    @Qualifier(RetryConfig.BOOKING_RETRY) RetryTemplate retry,
                    BookingRules rules,
                    BookingRepository bookings,
-                   PropertyRepository properties) {
+                   PropertyRepository properties,
+                   BookingUpdates updates,
+                   PaymentService payments) {
         this.attempt = attempt;
         this.retry = retry;
         this.rules = rules;
         this.bookings = bookings;
         this.properties = properties;
+        this.updates = updates;
+        this.payments = payments;
     }
 
     /**
-     * Books a stay for the guest, or throws: InvalidRequestException (400) when a rule
-     * refuses it, ResourceNotFoundException (404), OperationNotAllowedException (403) for
-     * one's own listing, ConflictException (409) when the listing or the dates are taken.
+     * Books a stay for the guest and pays for it, or throws: InvalidRequestException (400)
+     * when a rule refuses it, ResourceNotFoundException (404), OperationNotAllowedException
+     * (403) for one's own listing, ConflictException (409) when the listing or the dates are
+     * taken, PaymentFailedException (402) or PaymentUnavailableException (503) when the
+     * payment fails, in which case the dates have been released again.
      *
-     * Deliberately not {@code @Transactional}: each attempt brings its own transaction.
+     * Deliberately not {@code @Transactional}: each step brings its own transaction.
+     *
+     * @return the booking, CONFIRMED; or, if the payment provider's answer was lost, PENDING
+     *         until the reconciliation job finds out what happened
      */
     public BookingView book(BookingRequest request, long guestId) {
         // Cheap checks first: no transaction and no retry for a request that can never succeed.
         rules.checkDates(request.getCheckIn(), request.getCheckOut());
-        BookingView booking;
+        BookingView held = hold(request, guestId);
+        // An event name plus key/value pairs: "booking.created bookingId=1 ..." locally,
+        // separate JSON fields in the render profile's logs.
+        log.atInfo().setMessage("booking.created")
+                .addKeyValue("bookingId", held.id())
+                .addKeyValue("propertyId", held.property().id())
+                .addKeyValue("guestId", guestId)
+                .addKeyValue("checkIn", held.checkIn())
+                .addKeyValue("checkOut", held.checkOut())
+                .addKeyValue("total", held.totalAmount())
+                .addKeyValue("currency", held.currency())
+                .addKeyValue("status", held.status())
+                .log();
+        return payments.collect(held, request.getPaymentMethodId());
+    }
+
+    /** Inserts the booking as PENDING, which holds its dates, surviving races as described above. */
+    private BookingView hold(BookingRequest request, long guestId) {
         try {
             // invoke() runs the attempt, runs it again after a lost race (the policy is in
             // RetryConfig) and, if it never succeeds, rethrows the last failure as it was.
-            booking = retry.invoke(() -> attempt.place(request, guestId));
+            return retry.invoke(() -> attempt.place(request, guestId));
         } catch (ConcurrencyFailureException lostEveryRace) {
             throw recover(request, guestId, lostEveryRace);
         } catch (DataIntegrityViolationException refused) {
@@ -99,18 +130,6 @@ public class BookingService {
                     .log();
             throw new ConflictException("booking.dates.justTaken");
         }
-        // An event name plus key/value pairs: "booking.created bookingId=1 ..." locally,
-        // separate JSON fields in the render profile's logs.
-        log.atInfo().setMessage("booking.created")
-                .addKeyValue("bookingId", booking.id())
-                .addKeyValue("propertyId", booking.property().id())
-                .addKeyValue("guestId", guestId)
-                .addKeyValue("checkIn", booking.checkIn())
-                .addKeyValue("checkOut", booking.checkOut())
-                .addKeyValue("total", booking.totalAmount())
-                .addKeyValue("currency", booking.currency())
-                .log();
-        return booking;
     }
 
     /**
@@ -130,7 +149,10 @@ public class BookingService {
 
     @Transactional(readOnly = true)
     public BookingView get(long bookingId, long actingUserId) {
-        return BookingViews.toView(loadVisibleTo(bookingId, actingUserId));
+        Booking booking = bookings.findWithDetailsById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("booking.notFound", bookingId));
+        rules.checkVisibleTo(booking, actingUserId);
+        return BookingViews.toView(booking);
     }
 
     /** The acting user's own trips, latest check-in first. */
@@ -155,40 +177,15 @@ public class BookingService {
     }
 
     /**
-     * Cancels a booking, which frees its dates at once: the overlap constraint only
-     * counts PENDING and CONFIRMED bookings. Cancelling a booking that is already
-     * cancelled changes nothing and is not an error, so a client can safely repeat it.
+     * Cancels a booking, which frees its dates at once, and gives the money back in full if it
+     * was paid for (a free cancellation until check-in day).
      *
-     * The listing is not locked: nothing a cancellation does can break a rule.
+     * Two steps, deliberately not one transaction: the cancellation commits first, then the
+     * refund is asked for, outside any transaction. If the refund fails, the booking stays
+     * cancelled with a refund owed (CANCELLED and PAID) and the reconciliation job tries
+     * again; cancelling again also retries it. A repeated cancel is never an error.
      */
-    @Transactional
     public BookingView cancel(long bookingId, long actingUserId) {
-        Booking booking = loadVisibleTo(bookingId, actingUserId);
-        if (booking.getStatus() == BookingStatus.CANCELLED) {
-            return BookingViews.toView(booking);
-        }
-        rules.checkCancellable(booking);
-        booking.setStatus(BookingStatus.CANCELLED);
-        // Write now, so a clash with a simultaneous change to this booking (its own version
-        // check) surfaces here and becomes a 409, rather than at commit.
-        bookings.flush();
-        log.atInfo().setMessage("booking.cancelled")
-                .addKeyValue("bookingId", bookingId)
-                .addKeyValue("propertyId", booking.getProperty().getId())
-                .addKeyValue("byUserId", actingUserId)
-                .log();
-        return BookingViews.toView(booking);
-    }
-
-    /** The guest who made a booking and the listing's host may see and cancel it; nobody else. */
-    private Booking loadVisibleTo(long bookingId, long actingUserId) {
-        Booking booking = bookings.findWithDetailsById(bookingId)
-                .orElseThrow(() -> new ResourceNotFoundException("booking.notFound", bookingId));
-        boolean isGuest = booking.getGuest().getId() == actingUserId;
-        boolean isHost = booking.getProperty().getHost().getId() == actingUserId;
-        if (!isGuest && !isHost) {
-            throw new OperationNotAllowedException("booking.notYours");
-        }
-        return booking;
+        return payments.refundIfOwed(updates.cancel(bookingId, actingUserId));
     }
 }

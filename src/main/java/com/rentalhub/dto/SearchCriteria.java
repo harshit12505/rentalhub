@@ -1,5 +1,7 @@
 package com.rentalhub.dto;
 
+import com.rentalhub.domain.model.enums.Currency;
+
 import java.math.BigDecimal;
 import java.util.Locale;
 
@@ -13,10 +15,13 @@ import java.util.Locale;
  * @param city      trimmed and lower-cased; null means any city
  * @param minGuests at least this many guests; null means any
  * @param maxPrice  at most this price per night, trailing zeros removed; null means any
+ * @param currency  the currency maxPrice is in. Present exactly when maxPrice is: without a
+ *                  price limit it changes nothing, so it is dropped, and such searches share
+ *                  one cache entry whatever currency the client happened to send
  * @param page      zero-based page number
  * @param size      results per page, between 1 and {@link #MAX_PAGE_SIZE}
  */
-public record SearchCriteria(String city, Integer minGuests, BigDecimal maxPrice, int page, int size) {
+public record SearchCriteria(String city, Integer minGuests, BigDecimal maxPrice, Currency currency, int page, int size) {
 
     public static final int DEFAULT_PAGE_SIZE = 20;
     public static final int MAX_PAGE_SIZE = 50;
@@ -25,6 +30,11 @@ public record SearchCriteria(String city, Integer minGuests, BigDecimal maxPrice
         city = normaliseCity(city);
         minGuests = (minGuests == null || minGuests < 1) ? null : minGuests;
         maxPrice = maxPrice == null ? null : maxPrice.stripTrailingZeros();
+        if (maxPrice == null) {
+            currency = null;
+        } else if (currency == null) {
+            throw new IllegalArgumentException("A price limit needs its currency");
+        }
         page = Math.max(page, 0);
         // Capped so no client can ask for a 10,000-row page, which also keeps the
         // number of distinct cache keys bounded.

@@ -126,7 +126,7 @@ class PropertyCachingTest extends IntegrationTest {
     @DisplayName("a search page is cached in Redis under its normalised filters, with a TTL")
     void searchPageIsCached() {
         propertyService.create(TestRequests.validVilla(), host.getId());
-        SearchCriteria messy = new SearchCriteria("  GOA ", null, null, 0, 20);
+        SearchCriteria messy = new SearchCriteria("  GOA ", null, null, null, 0, 20);
 
         assertThat(searchService.search(messy).content()).hasSize(1);
         assertThat(redis.hasKey(searchKey(messy))).isTrue();
@@ -135,7 +135,7 @@ class PropertyCachingTest extends IntegrationTest {
         // A second Goa villa, inserted behind the service's back: no event, no eviction.
         properties.save(factory.create(TestRequests.validVilla(), host));
 
-        assertThat(searchService.search(new SearchCriteria("goa", null, null, 0, 20)).content())
+        assertThat(searchService.search(new SearchCriteria("goa", null, null, null, 0, 20)).content())
                 .as("served from the cache, so the new row is not visible yet")
                 .hasSize(1);
     }
@@ -143,7 +143,7 @@ class PropertyCachingTest extends IntegrationTest {
     @Test
     @DisplayName("a new listing flushes its city's pages, so it shows up immediately")
     void createFlushesItsCity() {
-        SearchCriteria goa = new SearchCriteria("goa", null, null, 0, 20);
+        SearchCriteria goa = new SearchCriteria("goa", null, null, null, 0, 20);
         assertThat(searchService.search(goa).content()).isEmpty();   // an empty page, cached
 
         propertyService.create(TestRequests.validVilla(), host.getId());
@@ -156,9 +156,9 @@ class PropertyCachingTest extends IntegrationTest {
     void onlyAffectedPartitionsAreFlushed() {
         long villaId = propertyService.create(TestRequests.validVilla(), host.getId()).id();   // Goa
         propertyService.create(TestRequests.validApartment(), host.getId());                  // Chennai
-        SearchCriteria goa = new SearchCriteria("goa", null, null, 0, 20);
-        SearchCriteria chennai = new SearchCriteria("chennai", null, null, 0, 20);
-        SearchCriteria anyCity = new SearchCriteria(null, null, null, 0, 20);
+        SearchCriteria goa = new SearchCriteria("goa", null, null, null, 0, 20);
+        SearchCriteria chennai = new SearchCriteria("chennai", null, null, null, 0, 20);
+        SearchCriteria anyCity = new SearchCriteria(null, null, null, null, 0, 20);
         searchService.search(goa);
         searchService.search(chennai);
         searchService.search(anyCity);
@@ -176,8 +176,8 @@ class PropertyCachingTest extends IntegrationTest {
     @DisplayName("a listing that moves city flushes the old city's pages and the new city's")
     void moveFlushesBothCities() {
         long villaId = propertyService.create(TestRequests.validVilla(), host.getId()).id();   // Goa
-        SearchCriteria goa = new SearchCriteria("goa", null, null, 0, 20);
-        SearchCriteria mumbai = new SearchCriteria("mumbai", null, null, 0, 20);
+        SearchCriteria goa = new SearchCriteria("goa", null, null, null, 0, 20);
+        SearchCriteria mumbai = new SearchCriteria("mumbai", null, null, null, 0, 20);
         assertThat(searchService.search(goa).content()).hasSize(1);
         assertThat(searchService.search(mumbai).content()).isEmpty();
 

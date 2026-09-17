@@ -382,7 +382,9 @@ range.
      `availableUntil` (else 400);
    - `countOverlapping` > 0 → 409 "already booked";
    - `Booking.reserve()` prices it: 3 nights × ₹2,500.00 = ₹7,500.00, in the listing's currency;
-   - status CONFIRMED (no payments until Phase 5);
+   - status CONFIRMED (no payments until Phase 5). *(Since Phase 5 it's PENDING, which holds
+     the dates, and the payment is taken after this transaction. See
+     [05 — Payments](05-payments.md), §4.)*
    - `INSERT` the booking. The constraint checks it now (it may wait, §6.1);
    - publish `ListingBookedEvent`;
    - build the `BookingView` while the session is still open.
@@ -436,7 +438,7 @@ through the code, so `BookingRulesTest` can pin today to 14 Sep 2026.
 including check-in day.
 
 - It's a POST to an action, not a DELETE, because a cancelled booking stays on record as history
-  (and, from Phase 5, perhaps a refund).
+  (and, since Phase 5, a refund if it was paid for).
 - Cancelling twice returns the same cancelled booking, not an error. A request that is safe to
   repeat is called **idempotent**, which matters when a network hiccup makes the client resend.
 - Cancelling doesn't lock the listing, because nothing it does can break a rule. It frees the
@@ -611,7 +613,7 @@ purchases and process them in order.
 - **"Today" is the server's date**, not the listing's local date. Around midnight a guest far from
   the server's time zone could be a day off. The proper fix is a time zone per listing.
 - **Bookings are confirmed immediately**, because there are no payments yet. Phase 5 adds PENDING
-  (awaiting payment).
+  (awaiting payment). *(Done in Phase 5: see [05 — Payments](05-payments.md).)*
 - **Nothing marks stays COMPLETED yet.** A scheduled job could (Phase 4 adds scheduling).
 - **Contention adds latency.** A booking that loses repeatedly waits up to about 350 ms before the
   recover step answers.

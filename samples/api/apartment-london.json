@@ -1,0 +1,13 @@
+{
+  "type": "APARTMENT",
+  "title": "Canal-side flat",
+  "description": "A one-bedroom flat by the canal, near the Tube.",
+  "city": "London",
+  "country": "United Kingdom",
+  "pricePerNight": 95,
+  "currency": "GBP",
+  "maxGuests": 2,
+  "bedrooms": 1,
+  "bathrooms": 1,
+  "attributes": { "floorNumber": "2" }
+}

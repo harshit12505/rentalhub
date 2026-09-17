@@ -5,7 +5,9 @@ import com.rentalhub.support.TestMessages;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.util.Locale;
@@ -69,6 +71,25 @@ class GlobalExceptionHandlerTest {
         assertThat(notAllowed.getStatus()).isEqualTo(403);
         assertThat(conflict.getStatus()).isEqualTo(409);
         assertThat(conflict.getProperties()).containsEntry("messageKey", "property.delete.hasBookings");
+    }
+
+    @Test
+    @DisplayName("a failed payment is a 402; a payment provider in trouble is a 503 that says when to try again")
+    void paymentProblems() {
+        ProblemDetail declined = handler.handlePaymentFailed(
+                new PaymentFailedException("payment.declined"), Locale.ENGLISH);
+        ResponseEntity<ProblemDetail> unavailable = handler.handlePaymentUnavailable(
+                new PaymentUnavailableException("payment.unavailable"), Locale.ENGLISH);
+
+        assertThat(declined.getStatus()).isEqualTo(402);
+        assertThat(declined.getTitle()).isEqualTo("Payment failed");
+        assertThat(declined.getDetail())
+                .isEqualTo("The card was declined, and nothing was charged. Please try a different card.");
+        assertThat(unavailable.getStatusCode().value()).isEqualTo(503);
+        assertThat(unavailable.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("60");
+        assertThat(unavailable.getBody()).isNotNull();
+        assertThat(unavailable.getBody().getTitle()).isEqualTo("Temporarily unavailable");
+        assertThat(unavailable.getBody().getProperties()).containsEntry("messageKey", "payment.unavailable");
     }
 
     @Test

@@ -81,6 +81,26 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
+     * The card was declined, or needs a check this API can't do. 402 Payment Required is the
+     * status Stripe itself uses for card errors. Nothing was charged; the dates were released.
+     */
+    @ExceptionHandler(PaymentFailedException.class)
+    public ProblemDetail handlePaymentFailed(PaymentFailedException ex, Locale locale) {
+        return localizedProblem(HttpStatus.PAYMENT_REQUIRED, ex, locale);
+    }
+
+    /**
+     * The payment provider couldn't take the payment. Nothing was charged, and trying again in
+     * a while may work, which is what 503 and its Retry-After header (in seconds) say.
+     */
+    @ExceptionHandler(PaymentUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handlePaymentUnavailable(PaymentUnavailableException ex, Locale locale) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, "60")
+                .body(localizedProblem(HttpStatus.SERVICE_UNAVAILABLE, ex, locale));
+    }
+
+    /**
      * Two requests changed the same rows at the same moment and this one lost: its
      * version check failed (optimistic locking), for example a host saving a listing just
      * as a guest booked it, or Postgres broke a deadlock by cancelling it. Nothing was

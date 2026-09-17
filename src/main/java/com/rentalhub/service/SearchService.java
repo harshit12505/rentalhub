@@ -27,10 +27,12 @@ public class SearchService {
 
     private final PropertyRepository properties;
     private final PropertyImageRepository images;
+    private final CurrencyService currencies;
 
-    public SearchService(PropertyRepository properties, PropertyImageRepository images) {
+    public SearchService(PropertyRepository properties, PropertyImageRepository images, CurrencyService currencies) {
         this.properties = properties;
         this.images = images;
+        this.currencies = currencies;
     }
 
     /**
@@ -38,22 +40,42 @@ public class SearchService {
      *
      * Cached in Redis only, under a key built from the full normalised filter set (see
      * SearchCacheKeys), so every app instance shares the same pages. A listing change
-     * flushes only the pages that could contain it (see PropertyCacheInvalidator).
+     * flushes only the pages that could contain it (see PropertyCacheInvalidator). A page
+     * built without exchange rates is not cached: it is incomplete, and it would outlive
+     * the outage that caused it.
+     *
+     * A price limit is compared in each listing's own currency: the limit is converted into
+     * every currency (see CurrencyService.ceilings), and the query compares each listing with
+     * the ceiling for its currency. Prices themselves are never converted or stored converted.
      *
      * A fixed number of queries per page, however many listings it holds: the listings,
      * their total count (for page numbers), and all their cover images in one go.
      * Fetching each listing's images separately would be one extra query per row (the
      * "N+1 problem").
      */
-    @Cacheable(cacheNames = CacheNames.PROPERTY_SEARCH, keyGenerator = CacheNames.SEARCH_KEY_GENERATOR)
+    @Cacheable(cacheNames = CacheNames.PROPERTY_SEARCH, keyGenerator = CacheNames.SEARCH_KEY_GENERATOR,
+            unless = "#result.exchangeRatesUnavailable()")
     public SearchResultPage search(SearchCriteria criteria) {
         log.atDebug().setMessage("cache.miss")
                 .addKeyValue("cache", CacheNames.PROPERTY_SEARCH)
                 .addKeyValue("criteria", criteria)
                 .addKeyValue("action", "query-database")
                 .log();
+        // Worked out before the query, outside its transaction: it may fetch rates over HTTP.
+        PriceCeilings ceilings = criteria.maxPrice() == null
+                ? null
+                : currencies.ceilings(criteria.maxPrice(), criteria.currency());
+        boolean ratesMissing = ceilings != null && !ceilings.complete();
+        if (ratesMissing) {
+            log.atWarn().setMessage("search.priceFilter.partial")
+                    .addKeyValue("maxPrice", criteria.maxPrice())
+                    .addKeyValue("currency", criteria.currency())
+                    .addKeyValue("comparedCurrencies", ceilings.byCurrency().keySet())
+                    .log();
+        }
+
         Page<Property> page = properties.search(
-                criteria.city(), criteria.minGuests(), criteria.maxPrice(),
+                criteria.city(), criteria.minGuests(), ceilings == null ? null : ceilings.byCurrency(),
                 PageRequest.of(criteria.page(), criteria.size(), NEWEST_FIRST));
 
         Map<Long, String> covers = coverImages(page.getContent());
@@ -61,7 +83,7 @@ public class SearchService {
                 .map(property -> PropertyViews.toSummary(property, covers.get(property.getId())))
                 .toList();
         return new SearchResultPage(content, criteria.page(), criteria.size(),
-                page.getTotalElements(), page.getTotalPages());
+                page.getTotalElements(), page.getTotalPages(), ratesMissing);
     }
 
     private Map<Long, String> coverImages(List<Property> listings) {

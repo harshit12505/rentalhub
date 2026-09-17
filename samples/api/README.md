@@ -33,6 +33,10 @@ They assume the hands-on guide's data: listing 1 is Asha's villa (sleeps 8), lis
 apartment (sleeps 2, ₹2,500 a night), and user 2 is the guest Ravi. The dates are in 2027; if you
 read this after March 2027, move them into the future.
 
+Since Phase 5 every booking also names the card to pay with, as a Stripe test payment-method
+id. `pm_card_visa` always succeeds. With no Stripe key the app's payment simulator answers to
+the same ids, so nothing is really charged.
+
 | File | What it is | Expected when POSTed |
 |---|---|---|
 | `booking.json` | apartment, 10–13 Mar 2027, 2 guests | 201, 3 nights, ₹7,500.00 |
@@ -42,13 +46,34 @@ read this after March 2027, move them into the future.
 | `booking-checkout-before-checkin.json` | check-out 3 days before check-in | 400 `booking.checkOut.beforeCheckIn` |
 | `booking-past-checkin.json` | January 2026 | 400 `booking.checkIn.past` |
 | `booking-too-long.json` | 151 nights | 400 `booking.nights.max` |
-| `booking-missing-fields.json` | no dates, 0 guests | 400 with an `errors` list |
+| `booking-missing-fields.json` | no dates, 0 guests, no payment method | 400 with an `errors` list |
 | `booking-unknown-listing.json` | listing 999 | 404 `property.notFound` |
 | `booking-villa.json` | villa, 1–6 Apr | 201 for a guest; 403 `booking.ownListing` for its host (user 1) |
 | `booking-race-a.json`, `booking-race-b.json` | villa, 1–6 May and 4–9 May: send both at once | one 201, one 409 |
 | `booking-price-race.json` | apartment, 10–13 Jun, for the staged retry | 201 at the new price |
 | `booking-constraint-race.json` | apartment, 10–13 Jul, for the staged constraint race | 409 `booking.dates.justTaken` |
 | `booking-rollback-race.json` | apartment, 10–13 Sep, for the same race ending in ROLLBACK | 201 |
+
+## Payments and currencies (Phase 5)
+
+Every way a payment can end, and prices in other currencies. Hands-on guide Parts 36–43 use
+them in this order; the ids assume that guide's data.
+
+| File | What it is | Expected |
+|---|---|---|
+| `booking-declined.json` | apartment, 20–23 Mar 2027, `pm_card_visa_chargeDeclined` | 402 `payment.declined`; nothing charged, the dates free again |
+| `booking-after-decline.json` | the same dates, `pm_card_visa` | 201 |
+| `booking-3ds.json` | apartment, 26–29 Mar, `pm_card_authenticationRequired` | 402 `payment.authenticationRequired` |
+| `booking-provider-down.json` | the same dates, `pm_sim_providerDown` (simulator only) | 503 `payment.unavailable`, with `Retry-After: 60` |
+| `booking-card-number.json` | a card number where a payment-method id belongs | 400, field `paymentMethodId` |
+| `booking-no-answer.json` | villa, 1–6 Apr, `pm_sim_noAnswer` (simulator only) | 202, `PENDING`, until the reconciliation job confirms it |
+| `studio-dubai.json` | a studio in Dubai at AED 300 (POST to `/api/properties` as a host) | 201 |
+| `apartment-london.json` | a flat in London at £95 (POST to `/api/properties` as a host) | 201 |
+| `booking-london.json` | the London flat (listing 4 in the guide), 5–8 May | 201; add `?currency=INR` to the URL to see the total in rupees too |
+
+Any read also takes `?currency=INR|USD|EUR|GBP|AED`, which adds the price converted into that
+currency (`displayPrice`, or `displayTotal` on a booking). It's for display only: what is
+charged and stored is always the listing's own currency.
 
 ## Reviews (`/api/properties/{id}/reviews`, `/api/reviews/{id}`)
 

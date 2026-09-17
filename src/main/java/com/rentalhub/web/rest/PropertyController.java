@@ -1,10 +1,12 @@
 package com.rentalhub.web.rest;
 
+import com.rentalhub.domain.model.enums.Currency;
 import com.rentalhub.dto.ListingHistoryEntry;
 import com.rentalhub.dto.PropertyRequest;
 import com.rentalhub.dto.PropertyView;
 import com.rentalhub.dto.SearchCriteria;
 import com.rentalhub.dto.SearchResultPage;
+import com.rentalhub.service.CurrencyService;
 import com.rentalhub.service.ListingHistoryService;
 import com.rentalhub.service.PropertyService;
 import com.rentalhub.service.SearchService;
@@ -35,6 +37,10 @@ import java.util.List;
  * {@value ApiHeaders#DEMO_USER_ID} header, standing in for the "sign in as" switcher the
  * web pages get in phase 8. The controller only translates HTTP to service calls; every
  * rule (who may create, who may edit, what is valid) is enforced in the service.
+ *
+ * Reads take an optional {@code currency} (INR, USD, EUR, GBP, AED): prices are then also
+ * shown converted into it, as {@code displayPrice}. The listing's own price and currency
+ * are always there too, and are what a booking charges.
  */
 @RestController
 @RequestMapping("/api/properties")
@@ -43,27 +49,40 @@ public class PropertyController {
     private final PropertyService propertyService;
     private final SearchService searchService;
     private final ListingHistoryService historyService;
+    private final CurrencyService currencyService;
 
     public PropertyController(PropertyService propertyService,
                               SearchService searchService,
-                              ListingHistoryService historyService) {
+                              ListingHistoryService historyService,
+                              CurrencyService currencyService) {
         this.propertyService = propertyService;
         this.searchService = searchService;
         this.historyService = historyService;
+        this.currencyService = currencyService;
     }
 
     @GetMapping("/{id}")
-    public PropertyView get(@PathVariable long id) {
-        return propertyService.getListing(id);
+    public PropertyView get(@PathVariable long id, @RequestParam(required = false) Currency currency) {
+        return currencyService.inCurrency(propertyService.getListing(id), currency);
     }
 
+    /**
+     * @param maxPrice at most this price per night, in {@code currency}. Listings priced in
+     *                 other currencies are compared at today's exchange rate
+     * @param currency the currency to read maxPrice in and to show prices in. Without it,
+     *                 maxPrice is read in the default currency (INR) and no converted prices
+     *                 are added
+     */
     @GetMapping
     public SearchResultPage search(@RequestParam(required = false) String city,
                                    @RequestParam(required = false) Integer guests,
                                    @RequestParam(required = false) BigDecimal maxPrice,
+                                   @RequestParam(required = false) Currency currency,
                                    @RequestParam(defaultValue = "0") int page,
                                    @RequestParam(defaultValue = "" + SearchCriteria.DEFAULT_PAGE_SIZE) int size) {
-        return searchService.search(new SearchCriteria(city, guests, maxPrice, page, size));
+        SearchCriteria criteria = new SearchCriteria(city, guests, maxPrice, currencyService.orDefault(currency),
+                page, size);
+        return currencyService.inCurrency(searchService.search(criteria), currency);
     }
 
     @PostMapping

@@ -23,6 +23,8 @@
 
     <properties>
         <java.version>21</java.version>
+        <!-- Not managed by Spring Boot, so pinned here. Each major version pins a Stripe API version. -->
+        <stripe-java.version>33.4.2</stripe-java.version>
     </properties>
 
     <dependencies>
@@ -61,6 +63,13 @@
         <dependency>
             <groupId>org.hibernate.orm</groupId>
             <artifactId>hibernate-envers</artifactId>
+        </dependency>
+
+        <!-- Payments: Stripe's official Java client (used only when a test-mode key is configured) -->
+        <dependency>
+            <groupId>com.stripe</groupId>
+            <artifactId>stripe-java</artifactId>
+            <version>${stripe-java.version}</version>
         </dependency>
 
         <!-- Bean validation (@NotNull, @Size, ...) -->

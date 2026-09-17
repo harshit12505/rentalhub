@@ -75,11 +75,11 @@ class BookingAttempt {
             throw new ConflictException("booking.dates.unavailable");
         }
 
+        // PENDING and UNPAID. The dates are held from the moment this commits (the overlap
+        // constraint counts PENDING bookings), and PaymentService takes the payment after
+        // that, outside this transaction.
         Booking booking = Booking.reserve(property, guest, request.getCheckIn(), request.getCheckOut(),
                 request.getGuests());
-        // There is no payment step yet, so a booking is confirmed as soon as its dates are
-        // held. Phase 5 puts "PENDING until paid" in between.
-        booking.setStatus(BookingStatus.CONFIRMED);
         // The id comes from an IDENTITY column, so Hibernate runs the INSERT right away:
         // an overlap the database refuses shows up here, not later at commit.
         bookings.save(booking);

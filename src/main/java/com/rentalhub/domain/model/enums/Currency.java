@@ -27,4 +27,19 @@ public enum Currency {
     public BigDecimal round(BigDecimal amount) {
         return amount.setScale(fractionDigits(), RoundingMode.HALF_EVEN);
     }
+
+    /**
+     * The amount in this currency's smallest unit, which is how payment providers take it:
+     * ₹7,500.00 is 750000 paise, $139.99 is 13999 cents.
+     *
+     * Exact, never rounded. An amount with a fraction of the smallest unit (₹7,500.005) is a
+     * bug further up, and silently rounding it here would charge a different sum from the
+     * one the guest was shown. The classic double-based version, {@code (long) (price * 100)},
+     * is worse still: it truncates, and turns ₹2,499.99 into 249998 paise.
+     *
+     * @throws ArithmeticException if the amount has a fraction of the smallest unit
+     */
+    public long toMinorUnits(BigDecimal amount) {
+        return amount.movePointRight(fractionDigits()).longValueExact();
+    }
 }

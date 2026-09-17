@@ -10,8 +10,9 @@ interview. One doc per phase, written as each phase is built.
 | [00 — Stack choices](00-stack-choices.md) | Why each technology, what the alternatives were, and what to say when asked |
 | [01 — Foundation](01-foundation.md) | Maven, Spring Boot, JPA/Hibernate, Flyway, the schema, the double-booking constraint, BigDecimal, the Factory + Template Method patterns, i18n keys, testing |
 | [02 — Caching](02-caching.md) | Cache-aside, Caffeine + Redis tiers, W-TinyLFU, cache stampedes, search keys and partitions, after-commit invalidation, SCAN vs KEYS, deferred vs immediate removal, Redis outages, the REST API, N+1 |
-| [04 — Auditing, logging and scheduling](04-auditing.md) | Audit trails with Hibernate Envers, revisions and `_aud` tables, recording who made a change, the listing history view, what the audit trail can't see, structured logging with key/value pairs and the MDC, request ids and log injection, JSON logs, `@Scheduled` cron jobs, the reviews rules |
 | [03 — Bookings and concurrency](03-bookings.md) | The double-booking race, ACID and isolation levels, optimistic locking and `OPTIMISTIC_FORCE_INCREMENT`, retry with backoff and jitter, recover, the self-invocation trap, the exclusion constraint under concurrency, the deadlock we found, testing races deterministically |
+| [04 — Auditing, logging and scheduling](04-auditing.md) | Audit trails with Hibernate Envers, revisions and `_aud` tables, recording who made a change, the listing history view, what the audit trail can't see, structured logging with key/value pairs and the MDC, request ids and log injection, JSON logs, `@Scheduled` cron jobs, the reviews rules |
+| [05 — Payments, money and currencies](05-payments.md) | BigDecimal vs double and minor units, Stripe PaymentIntents, why a payment can't be inside a transaction, the payment saga and its compensating action, idempotency keys, lost answers and the reconciliation job, refunds, the payment simulator, live exchange rates and how they're cached, `maxPrice` across currencies |
 
 ## How to use them
 
@@ -76,3 +77,14 @@ interview. One doc per phase, written as each phase is built.
 | **Log injection** | Sneaking a line break into logged input to forge a fake log line. The request-id filter refuses such ids. |
 | **Cron expression** | A schedule written as fields (second, minute, hour, day, month, weekday): `0 15 3 * * *` is "03:15 every day". |
 | **Idempotent job** | A job that is safe to run twice: the second run finds nothing left to do. |
+| **Minor units** | An amount in the currency's smallest unit, which is how payment providers take it: ₹75.00 is 7500 paise. |
+| **Test mode** | Stripe's sandbox: the same API with fake cards, where no money moves. |
+| **PaymentMethod** | A saved way to pay, such as a card, as an id (`pm_card_visa`), so card numbers never reach our server. |
+| **PaymentIntent** | Stripe's record of one attempt to collect one amount: created, confirmed with a payment method, then succeeded, declined, waiting for the bank, or cancelled. |
+| **Saga** | A sequence of steps, each committed on its own, where a failure part-way is repaired by a compensating action instead of a rollback. |
+| **Compensating action** | A step that undoes the effect of an earlier one: cancelling the booking when its payment fails. |
+| **Idempotency key** | A label on a request that makes a repeat of it return the first answer instead of acting twice. |
+| **Reconciliation** | Comparing your records with another system's and fixing the differences: here, asking the payment provider what happened to payments whose outcome was lost. |
+| **402 / 202 / 503** | Payment required (a declined card) / accepted but not finished (the payment's outcome isn't known yet) / temporarily unavailable (try again later). |
+| **Exchange rate (FX)** | How much of one currency one unit of another buys. FX is short for foreign exchange. |
+| **Stale-if-error** | Keeping on using slightly old cached data when a fresh copy can't be had, rather than failing. |

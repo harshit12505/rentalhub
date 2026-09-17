@@ -1,6 +1,7 @@
 package com.rentalhub.domain.repository;
 
 import com.rentalhub.domain.model.Property;
+import com.rentalhub.domain.model.enums.Currency;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,6 +15,7 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface PropertyRepository extends JpaRepository<Property, Long>, JpaSpecificationExecutor<Property> {
@@ -47,9 +49,13 @@ public interface PropertyRepository extends JpaRepository<Property, Long>, JpaSp
      * alongside vector similarity to build the hybrid query.
      * Every filter is optional: pass null to skip it. See PropertySpecifications
      * for why this is built dynamically rather than written as one JPQL string.
+     *
+     * @param maxPriceByCurrency one price ceiling per listing currency, so listings in
+     *                           different currencies are compared fairly (see PriceCeilings)
      */
-    default Page<Property> search(String city, Integer minGuests, BigDecimal maxPrice, Pageable pageable) {
-        return findAll(PropertySpecifications.search(city, minGuests, maxPrice), pageable);
+    default Page<Property> search(String city, Integer minGuests, Map<Currency, BigDecimal> maxPriceByCurrency,
+                                  Pageable pageable) {
+        return findAll(PropertySpecifications.search(city, minGuests, maxPriceByCurrency), pageable);
     }
 
     /**

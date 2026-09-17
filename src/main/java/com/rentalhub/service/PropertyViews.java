@@ -37,7 +37,8 @@ final class PropertyViews {
                         .toList(),
                 property.typeAttributes(),
                 property.getVersion(),
-                property.getUpdatedAt());
+                property.getUpdatedAt(),
+                null);
     }
 
     static PropertySummary toSummary(Property property, String coverImageUrl) {
@@ -52,6 +53,7 @@ final class PropertyViews {
                 property.getMaxGuests(),
                 property.getBedrooms(),
                 property.getBathrooms(),
-                coverImageUrl);
+                coverImageUrl,
+                null);
     }
 }

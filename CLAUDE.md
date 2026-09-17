@@ -35,6 +35,10 @@ Framework 7 has its own retry: `RetryTemplate`/`RetryPolicy` (`org.springframewo
 used for bookings, see `RetryConfig`) and `@Retryable` (`org.springframework.resilience.annotation`).
 There is no `@Recover`: recover with a try/catch around `RetryTemplate.invoke()`, which
 rethrows the last failure. `RetryPolicy` needs a positive `maxDelay`.
+Stripe: `com.stripe:stripe-java` 33.4.2 (not Boot-managed; pinned in the pom). Use
+`StripeClient` and its `v1()` services (`client.v1().paymentIntents()`); the direct
+accessors are deprecated. `StripeClient.builder().setApiBase(...)` points it at a fake
+server in tests. Its exceptions are checked (`StripeException`).
 
 ## Hard constraints
 - ONE deployable Spring Boot container. No Python, LangChain, Node, npm, package.json,
@@ -73,7 +77,25 @@ rethrows the last failure. `RetryPolicy` needs a positive `maxDelay`.
 - `open-in-view: false`. Services load everything a view needs.
 - Caches hold immutable DTO records, never managed entities (Caffeine hands the same
   instance to every caller). Changing a cached record's shape → bump
-  `rentalhub.cache.key-prefix` (`rentalhub:v1:` → `v2`).
+  `rentalhub.cache.key-prefix` (now `rentalhub:v2:`; next change → `v3`).
+- Payments (phase 5): a saga, never one transaction. `BookingAttempt` inserts the booking
+  PENDING/UNPAID (dates held) → `PaymentService.collect`: create the payment (no money moves)
+  → record its id (`BookingUpdates`, own transaction) → confirm → CONFIRMED/PAID, or
+  CANCELLED/FAILED (dates freed, payment cancelled), or left PENDING when the outcome is
+  unknown (`PaymentReconciliationJob` settles it). Booking state changes after the insert go
+  through `BookingUpdates` (one short transaction each) and the entity's transition methods
+  (`paymentStarted`, `paid`, `paymentFailed`, `cancel`, `refunded`). Every provider call
+  carries an idempotency key `rentalhub-booking-<id>-<createdAtMillis>-<step>`. Providers sit
+  behind `payment/PaymentGateway` (Stripe, or `SimulatedPaymentGateway` when
+  `STRIPE_SECRET_KEY` is unset; live keys are refused); a booking stores its
+  `payment_provider`, and refunds/lookups go back to that provider. 402 declined or
+  3-D Secure, 503 provider refused (`Retry-After`), 202 outcome unknown.
+- Currencies (phase 5): `?currency=` adds display-only `displayPrice`/`displayTotal` to a copy
+  of the (cached) record via `CurrencyService.inCurrency`; never stored or cached. Rates:
+  `fx/ExchangeRateApiSource` (open.er-api.com), kept in memory 1h, last good set kept up to
+  48h, 1m between failed fetches. `maxPrice` is converted into per-currency ceilings
+  (`PriceCeilings`, rounded DOWN) and the currency is part of the search cache key; default
+  currency INR (`rentalhub.fx.default-currency`).
 - Every listing write goes through `PropertyService`, which publishes `PropertyChangedEvent`;
   `PropertyCacheInvalidator` evicts after commit. Production code never changes listings
   via the repository directly (tests may, to bypass the caches on purpose). The one
@@ -104,7 +126,9 @@ rethrows the last failure. `RetryPolicy` needs a positive `maxDelay`.
 - No external calls (Stripe, S3, Gemini, FX API) inside a DB transaction.
 - No secrets in the repo: `${ENV_VAR:local-default}` in YAML; `.env` is git-ignored.
   Database env vars: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`.
-  Redis: `REDIS_URL` (default `redis://localhost:6379`).
+  Redis: `REDIS_URL` (default `redis://localhost:6379`). Payments: `STRIPE_SECRET_KEY`
+  (test key; unset → simulated), `STRIPE_API_BASE` (stripe-mock only). Rates: `FX_RATES_URL`.
+  Jobs: `STALE_LISTINGS_CRON`/`_ZONE`, `PAYMENT_RECONCILIATION_CRON`, `PAYMENT_STALE_AFTER`.
   `spring.profiles.default: local`; Render sets `SPRING_PROFILES_ACTIVE=render`.
 - Case conversion of identifiers uses `Locale.ROOT`.
 - Javadoc explains *why*, not what.
@@ -116,26 +140,30 @@ rethrows the last failure. `RetryPolicy` needs a positive `maxDelay`.
 
 ## Package layout (base `com.rentalhub`)
 ```
-config/        CacheConfig, ClockConfig, RetryConfig, SchedulingConfig, WebConfig,
-               OpenApiConfig, S3Config, StripeConfig, AiConfig (Envers is set in application.yml)
+config/        CacheConfig, ClockConfig, RetryConfig, SchedulingConfig, StripeConfig
+               (chooses the payment gateway), CurrencyConfig (rates client), WebConfig,
+               OpenApiConfig, S3Config, AiConfig (Envers is set in application.yml)
 audit/         AuditActor (who is acting, per thread), Revision (revinfo), ActorRevisionListener
+payment/       PaymentGateway (+ StripePaymentGateway, SimulatedPaymentGateway), PaymentGateways,
+               PaymentOutcome, PaymentRequest, PaymentGatewayException, PaymentSettings
+fx/            ExchangeRates, ExchangeRateSource (+ ExchangeRateApiSource), FxSettings
 domain/model/  Property (abstract, SINGLE_TABLE) + Apartment/Villa/Cabin/Studio, User,
                Booking, Review, Favorite, PropertyImage; enums/ PropertyType,
-               BookingStatus, Currency, UserRole
+               BookingStatus, PaymentStatus, PaymentProvider, Currency, UserRole
 domain/repository/  Spring Data JPA interfaces
 factory/       PropertyCreator, AbstractPropertyCreator (template method), PropertyFactory,
                AttributeSpec, AttributeKind, TypeAttributes; impl/ one creator per type
 cache/         TwoLevelCache, PropertyCacheInvalidator, SearchCacheKeys(+KeyGenerator),
                CacheNames, CacheSettings (wired in config/CacheConfig)
 service/       PropertyService, SearchService, ListingHistoryService, BookingService
-               (+ BookingAttempt, BookingRules, BookingSettings, OverlapConstraint),
-               ReviewService, ConstraintViolations, PaymentService, CurrencyService,
-               ImageStorageService, DemoUserService
+               (+ BookingAttempt, BookingUpdates, BookingRules, BookingSettings,
+               OverlapConstraint), PaymentService, CurrencyService (+ PriceCeilings),
+               ReviewService, ConstraintViolations, ImageStorageService, DemoUserService
 ai/            AiAvailability, ListingEmbeddingService, PreferenceProfileService,
                HybridRetriever, RecommendationService, StatsService
 web/           RequestIdFilter (request id + user in the MDC, audit actor);
                rest/, graphql/, mvc/ controllers
-dto/, exception/, scheduling/ (StaleListingJob), bootstrap/ (DemoDataSeeder)
+dto/, exception/, scheduling/ (StaleListingJob, PaymentReconciliationJob), bootstrap/ (DemoDataSeeder)
 resources/     application.yml (+ -local, -render), db/migration/, messages*.properties,
                graphql/schema.graphqls, templates/, static/css/app.css
 docs/learning/ one teaching doc per phase
@@ -167,7 +195,7 @@ One phase at a time, in order. Never scaffold a later phase early. After each ph
 | 2 | Caching: Caffeine + Redis two-tier, invalidation (+ listings REST API) | done |
 | 3 | Bookings: transactions, optimistic locking, retry, concurrency test | done |
 | 4 | Auditing & scheduling: Envers, structured logs, @Scheduled job | done |
-| 5 | Payments: Stripe, BigDecimal math, multi-currency display | — |
+| 5 | Payments: Stripe, BigDecimal math, multi-currency display | done |
 | 6 | AI / RAG: embeddings, preference profile, hybrid search, stats mode | — |
 | 7 | Extra mile: S3, i18n, GraphQL, OpenAPI, Postman | — |
 | 8 | Frontend: Thymeleaf pages | — |
@@ -209,7 +237,7 @@ docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"   # cac
 - 2026-09-14 — Framework 7 RetryTemplate + try/catch recover, not @Retryable/@Recover — no @Recover in Framework 7; nesting explicit; unit-testable.
 - 2026-09-14 — Retry ConcurrencyFailureException (version race + deadlock) — the race test hit a real 40P01: overlapping inserts deadlock inside the exclusion constraint.
 - 2026-09-14 — Overlap-constraint violation → 409 booking.dates.justTaken, not retried — a retry could only answer the same.
-- 2026-09-14 — Bookings CONFIRMED immediately until phase 5 — no payment step yet.
+- 2026-09-14 — Bookings CONFIRMED immediately until phase 5 — no payment step yet. (Superseded 2026-09-16: PENDING until paid; no key → simulated payments.)
 - 2026-09-14 — Booking rules: ≤ 90 nights (config), guests ≤ max, check-out ≤ availableUntil, not own listing, any role may book; cancel is an idempotent POST action until check-in day.
 - 2026-09-14 — Any ConcurrencyFailureException reaching REST → 409 error.concurrentUpdate — closed the phase 2 open item on concurrent PUTs.
 - Open: a host deleting a listing at the instant it is booked → the guest may get a 500 (FK violation) — map to 404 if it matters.
@@ -220,4 +248,14 @@ docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"   # cac
 - 2026-09-15 — Reviews API added in phase 4 (spec audits and logs reviews; nothing created them): only guests whose confirmed stay has ended; one per guest per listing (check + unique constraint).
 - 2026-09-15 — Structured logging via SLF4J fluent key/value pairs + MDC; local `%kvp{NONE}` (same look as before), ECS JSON in the render profile; all event logs converted, not only bookings/reviews — one style.
 - 2026-09-15 — StaleListingJob: 03:15 UTC daily (env-overridable, "-" disables), one transaction per listing via PropertyService, no distributed lock (single instance; ShedLock documented).
-- Open: maxPrice filter ignores currency — fix in phase 5.
+- ~~Open: maxPrice filter ignores currency~~ — fixed 2026-09-16 (per-currency ceilings).
+- 2026-09-16 — Payment saga (hold dates PENDING → create PaymentIntent → record its id → confirm → settle); no external call in a transaction — a rollback can't undo a charge; the recorded id makes every failure recoverable.
+- 2026-09-16 — Server-side confirmation with a `paymentMethodId` in the booking request (Stripe test ids), redirects off; 3-D Secure → 402 for now — no browser until phase 8; card numbers never reach the server.
+- 2026-09-16 — No Stripe key → SimulatedPaymentGateway (Stripe's test ids + pm_sim_noAnswer/pm_sim_providerDown), labelled SIMULATED; live keys refused — Stripe India is invite-only; the saga must be demonstrable without an account.
+- 2026-09-16 — 201 paid, 202 outcome unknown, 402 declined/3-D Secure, 503 provider refused (Retry-After 60) — each tells the client what to do next.
+- 2026-09-16 — Failed payment keeps its row (CANCELLED + payment FAILED); separate `payment_status` (NONE/UNPAID/PAID/FAILED/REFUNDED), `payment_provider`, `refund_reference` (V3) — bookings are records; the provider's payment points at them; the spec's four statuses stay.
+- 2026-09-16 — Cancelling a paid booking refunds in full (cancel commits first, refund after); PENDING can't be cancelled (409) — free cancellation until check-in; no race with an undecided payment.
+- 2026-09-16 — PaymentReconciliationJob every 5 min: PENDING > 10 min settled via lookUp, refunds owed retried — covers lost answers and crashes between saga steps.
+- 2026-09-16 — Idempotency key = booking id + createdAt millis + step; createdAt truncated to micros on insert — ids repeat after a dev DB wipe; the in-memory and stored times must match.
+- 2026-09-16 — FX from ExchangeRate-API's open endpoint, in memory (1h refresh, last good up to 48h, 1m retry delay, one fetch at a time); display via `?currency=` only, never stored/cached — free, keyless, has AED (Frankfurter/ECB doesn't).
+- 2026-09-16 — maxPrice converted to per-currency ceilings rounded DOWN; default currency INR; without rates same-currency only + `exchangeRatesUnavailable` (not cached); currency in the search key; cache prefix v2 — fair comparison without stored conversions; old searches keep their meaning.
