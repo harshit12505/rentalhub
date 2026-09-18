@@ -13,6 +13,7 @@ interview. One doc per phase, written as each phase is built.
 | [03 — Bookings and concurrency](03-bookings.md) | The double-booking race, ACID and isolation levels, optimistic locking and `OPTIMISTIC_FORCE_INCREMENT`, retry with backoff and jitter, recover, the self-invocation trap, the exclusion constraint under concurrency, the deadlock we found, testing races deterministically |
 | [04 — Auditing, logging and scheduling](04-auditing.md) | Audit trails with Hibernate Envers, revisions and `_aud` tables, recording who made a change, the listing history view, what the audit trail can't see, structured logging with key/value pairs and the MDC, request ids and log injection, JSON logs, `@Scheduled` cron jobs, the reviews rules |
 | [05 — Payments, money and currencies](05-payments.md) | BigDecimal vs double and minor units, Stripe PaymentIntents, why a payment can't be inside a transaction, the payment saga and its compensating action, idempotency keys, lost answers and the reconciliation job, refunds, the payment simulator, live exchange rates and how they're cached, `maxPrice` across currencies |
+| [06 — AI: embeddings, RAG and search that understands](06-ai-rag.md) | What an embedding is, cosine similarity, pgvector and HNSW, keeping an index in step with the data, content hashes and quota, hybrid search (meaning + real SQL filters), a preference profile built from SQL, the taste vector as `avg(embedding)`, why the question is parsed with rules and statistics answered by SQL, the prompt and the grounding check that overrules a hallucination, degrading with no key, and testing AI without one |
 
 ## How to use them
 
@@ -88,3 +89,15 @@ interview. One doc per phase, written as each phase is built.
 | **402 / 202 / 503** | Payment required (a declined card) / accepted but not finished (the payment's outcome isn't known yet) / temporarily unavailable (try again later). |
 | **Exchange rate (FX)** | How much of one currency one unit of another buys. FX is short for foreign exchange. |
 | **Stale-if-error** | Keeping on using slightly old cached data when a fresh copy can't be had, rather than failing. |
+| **Embedding** | A list of numbers (768 here) standing for the meaning of a piece of text. Similar meanings get similar lists. |
+| **Vector** | That list of numbers, treated as a direction, so two meanings can be compared by the angle between them. |
+| **Cosine similarity** | How close two directions are: 1 the same, 0 unrelated. pgvector's `<=>` gives its opposite, the distance. |
+| **Vector store** | A table that can answer "which rows are closest to this vector?" quickly. Here: `vector_store`, in Postgres. |
+| **pgvector** | The Postgres extension that adds the `vector` column type and the operators and indexes that search it. |
+| **HNSW** | An index that finds *almost* the nearest vectors by walking a graph of neighbours, instead of comparing every row. |
+| **Semantic search** | Searching by meaning rather than by matching words. |
+| **RAG** | Retrieval-Augmented Generation: find the facts yourself, then let the model put *those* facts into sentences. |
+| **Grounding** | Making sure everything the model says comes from the facts you gave it — and checking afterwards that it did. |
+| **Hallucination** | The model stating something plausible and false, such as a listing that does not exist. |
+| **Prompt** | The text sent to the model: the instructions, the question, and the facts it may use. |
+| **Token / quota** | Models bill by word fragments, and free tiers cap requests per minute: the reason this phase avoids calling one. |

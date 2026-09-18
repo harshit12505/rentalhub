@@ -35,6 +35,14 @@ Framework 7 has its own retry: `RetryTemplate`/`RetryPolicy` (`org.springframewo
 used for bookings, see `RetryConfig`) and `@Retryable` (`org.springframework.resilience.annotation`).
 There is no `@Recover`: recover with a try/catch around `RetryTemplate.invoke()`, which
 rethrows the last failure. `RetryPolicy` needs a positive `maxDelay`.
+Spring AI 2.0.1, imported as a BOM: starters `spring-ai-starter-model-google-genai`,
+`spring-ai-starter-model-google-genai-embedding` (the embedding model ships separately) and
+`spring-ai-starter-vector-store-pgvector`. `PgVectorStoreAutoConfiguration` takes the
+`EmbeddingModel` as a constructor argument, so with no key the vector store must be switched
+off too, and the Gemini *embedding connection* auto-configuration has no property switch of
+its own and must be excluded. In Boot 4 an `EnvironmentPostProcessor` is registered as
+`org.springframework.boot.EnvironmentPostProcessor` in `META-INF/spring.factories`; the old
+`org.springframework.boot.env` name and its `.imports` file are ignored silently.
 Stripe: `com.stripe:stripe-java` 33.4.2 (not Boot-managed; pinned in the pom). Use
 `StripeClient` and its `v1()` services (`client.v1().paymentIntents()`); the direct
 accessors are deprecated. `StripeClient.builder().setApiBase(...)` points it at a fake
@@ -115,6 +123,15 @@ server in tests. Its exceptions are checked (`StripeException`).
   `RequestIdFilter`, by jobs with `try (var s = AuditActor.as(AuditActor.system(...)))`.
   Envers sees only changes made through Hibernate entities: plain SQL and bulk JPQL
   updates leave no history, so production code changes data through the services.
+- AI (phase 6): everything in `ai/` asks `AiAvailability` first and degrades instead of
+  failing; `/api/recommendations` always answers 200 with `aiUsed`/`semantic` flags. A listing
+  is embedded after commit (`ListingIndexUpdater` on `PropertyChangedEvent`, never throwing)
+  and only when the SHA-256 of its text changed; `EmbeddingIndexJob` sweeps up what was missed,
+  one listing per failure-logged iteration. The question is parsed and the intent routed by
+  rules (`QueryParser`), never by a model; questions with one right answer go to `StatsService`
+  (pure SQL); "like my favourites" is `avg(embedding)` inside Postgres. Vector candidates are
+  always re-checked against live rows in SQL (`PropertySpecifications.search(..., ids)`), and
+  every answer the model writes is checked for `[id]`s that were never offered.
 - Logging: an event name plus key/value pairs with SLF4J's fluent API
   (`log.atInfo().setMessage("booking.created").addKeyValue("bookingId", id).log()`), never
   values glued into the message. The MDC carries `requestId` and `userId` (web requests)
@@ -128,7 +145,9 @@ server in tests. Its exceptions are checked (`StripeException`).
   Database env vars: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`.
   Redis: `REDIS_URL` (default `redis://localhost:6379`). Payments: `STRIPE_SECRET_KEY`
   (test key; unset → simulated), `STRIPE_API_BASE` (stripe-mock only). Rates: `FX_RATES_URL`.
-  Jobs: `STALE_LISTINGS_CRON`/`_ZONE`, `PAYMENT_RECONCILIATION_CRON`, `PAYMENT_STALE_AFTER`.
+  AI: `GEMINI_API_KEY` (unset → the AI is switched off entirely).
+  Jobs: `STALE_LISTINGS_CRON`/`_ZONE`, `PAYMENT_RECONCILIATION_CRON`, `PAYMENT_STALE_AFTER`,
+  `EMBEDDING_INDEX_CRON`.
   `spring.profiles.default: local`; Render sets `SPRING_PROFILES_ACTIVE=render`.
 - Case conversion of identifiers uses `Locale.ROOT`.
 - Javadoc explains *why*, not what.
@@ -158,12 +177,16 @@ cache/         TwoLevelCache, PropertyCacheInvalidator, SearchCacheKeys(+KeyGene
 service/       PropertyService, SearchService, ListingHistoryService, BookingService
                (+ BookingAttempt, BookingUpdates, BookingRules, BookingSettings,
                OverlapConstraint), PaymentService, CurrencyService (+ PriceCeilings),
-               ReviewService, ConstraintViolations, ImageStorageService, DemoUserService
-ai/            AiAvailability, ListingEmbeddingService, PreferenceProfileService,
+               ReviewService, FavoriteService, ConstraintViolations, ImageStorageService,
+               DemoUserService
+ai/            AiAvailability, AiSettings, AiEnvironmentPostProcessor (no key → AI off),
+               EmbeddingIndexStore, ListingEmbeddingService, ListingIndexUpdater,
+               ParsedQuery + QueryParser (rules), PreferenceProfile(+Service),
                HybridRetriever, RecommendationService, StatsService
 web/           RequestIdFilter (request id + user in the MDC, audit actor);
                rest/, graphql/, mvc/ controllers
-dto/, exception/, scheduling/ (StaleListingJob, PaymentReconciliationJob), bootstrap/ (DemoDataSeeder)
+dto/, exception/, scheduling/ (StaleListingJob, PaymentReconciliationJob,
+               EmbeddingIndexJob), bootstrap/ (DemoDataSeeder)
 resources/     application.yml (+ -local, -render), db/migration/, messages*.properties,
                graphql/schema.graphqls, templates/, static/css/app.css
 docs/learning/ one teaching doc per phase
@@ -196,7 +219,7 @@ One phase at a time, in order. Never scaffold a later phase early. After each ph
 | 3 | Bookings: transactions, optimistic locking, retry, concurrency test | done |
 | 4 | Auditing & scheduling: Envers, structured logs, @Scheduled job | done |
 | 5 | Payments: Stripe, BigDecimal math, multi-currency display | done |
-| 6 | AI / RAG: embeddings, preference profile, hybrid search, stats mode | — |
+| 6 | AI / RAG: embeddings, preference profile, hybrid search, stats mode (+ favourites) | done |
 | 7 | Extra mile: S3, i18n, GraphQL, OpenAPI, Postman | — |
 | 8 | Frontend: Thymeleaf pages | — |
 | 9 | Ship: seeder, Dockerfile, render.yaml, README, deploy guide | — |
@@ -259,3 +282,10 @@ docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"   # cac
 - 2026-09-16 — Idempotency key = booking id + createdAt millis + step; createdAt truncated to micros on insert — ids repeat after a dev DB wipe; the in-memory and stored times must match.
 - 2026-09-16 — FX from ExchangeRate-API's open endpoint, in memory (1h refresh, last good up to 48h, 1m retry delay, one fetch at a time); display via `?currency=` only, never stored/cached — free, keyless, has AED (Frankfurter/ECB doesn't).
 - 2026-09-16 — maxPrice converted to per-currency ceilings rounded DOWN; default currency INR; without rates same-currency only + `exchangeRatesUnavailable` (not cached); currency in the search key; cache prefix v2 — fair comparison without stored conversions; old searches keep their meaning.
+- 2026-09-18 — Favourites API added in phase 6 (idempotent PUT/DELETE) — the preference profile and the taste vector are built from favourites, and nothing created any.
+- 2026-09-18 — Rules, not an LLM, parse the question and route the intent; statistics answered by pure SQL — deterministic, testable, free, and no second failure mode before any work starts.
+- 2026-09-18 — "Like my favourites" is the average of their embeddings computed in Postgres — a taste with no model call; the saved listings themselves are excluded.
+- 2026-09-18 — Flyway owns `vector_store` (V4, 768 dims, HNSW, cosine); Spring AI schema init off; document id derived from the listing id, content hashed, price rounded to the currency's decimals before hashing — one owner for the schema, one document per listing, no re-embedding of unchanged text.
+- 2026-09-18 — The model is shown only the retrieved listings as `[id]`, and the answer is checked afterwards (invented ids removed, all-invented answers discarded) — a prompt is a request; a check is a rule.
+- 2026-09-18 — No key: `AiEnvironmentPostProcessor` switches chat, embeddings and the vector store off and excludes the Gemini embedding connection auto-config — the app must start without credentials.
+- 2026-09-18 — Tests fake only the two models (`support/FakeAiModels`); the vector store, pgvector and the SQL are real — no build depends on a key, quota or the network.

@@ -23,20 +23,23 @@ added at the end of every phase.
 | 1 | Foundation | ✅ done | `29081ff` |
 | 2 | Caching (Caffeine + Redis) + listings REST API | ✅ done | `30f5d45` (+ docs `498df7c`), merged via PR #1 (`0ce70c6`) |
 | 3 | Bookings & concurrency | ✅ done | `6c20a81`, merged via PR #2 (`5305753`) |
-| 4 | Auditing, logging & scheduling (+ reviews) | ✅ done | `1fbd71a` on branch `phase-4-auditing`, PR #3 open |
-| 5 | Payments & money (+ currencies) | ✅ done | `Phase 5: …` on branch `phase-5-payments`, which starts from Phase 4 (see `git log`) |
-| 6 | AI / RAG | next — waiting for your go-ahead | |
-| 7 | S3, i18n, GraphQL, OpenAPI, Postman | | |
+| 4 | Auditing, logging & scheduling (+ reviews) | ✅ done | `1fbd71a`, merged via PR #3 (`239a41f`) |
+| 5 | Payments & money (+ currencies) | ✅ done | `95a52da`, merged via PR #4 (`744ef1c`) |
+| 6 | AI / RAG (+ favourites) | ✅ done | `Phase 6: …` on branch `phase-6-ai` |
+| 7 | S3, i18n, GraphQL, OpenAPI, Postman | next — waiting for your go-ahead | |
 | 8 | Frontend (Thymeleaf) | | |
 | 9 | Ship: seeder, Docker, Render | | |
 
-**Numbers after Phase 5:** 269 automated tests (183 unit, 86 integration against real
-Postgres and Redis), all passing. Sixteen REST endpoints: listings (with their history),
-bookings and reviews.
-- **Payments:** bookings are paid for (Stripe test mode, or a built-in simulator) and
-  refunded when cancelled, and a job settles payments whose answer was lost.
-- **Currencies:** prices can be shown in five currencies, and the price filter compares
-  them fairly.
+**Numbers after Phase 6:** 307 automated tests (205 unit, 102 integration against real
+Postgres and Redis), all passing. Twenty REST endpoints: listings (with their history),
+bookings, reviews, favourites and recommendations.
+- **AI:** listings are indexed as vectors in Postgres (pgvector); a question in plain
+  English is answered by hybrid search — rules and SQL for the crisp parts, meaning for the
+  rest — and Gemini writes the answer from those listings only, with every id it names
+  checked afterwards. Questions about your own numbers are answered by SQL alone.
+- **It all works with no Gemini key**, with a plain answer saying which part was off.
+- **Carried over from Phase 5:** payments and refunds (Stripe or the simulator), and prices
+  in five currencies, which the recommendation budget filter reuses.
 - **Carried over from Phase 4:** every change is recorded with who made it, and every log
   line carries its request id.
 
@@ -47,31 +50,31 @@ notes may still mention the previous ids.
 
 ## 2. Your to-do list
 
-### Before Phase 6 (recommended)
+### Before Phase 7 (recommended)
 - [ ] Work through the **[hands-on guide](hands-on-guide.md)**.
-  - **Parts 36–43 are new** (about 30 minutes):
-    - pay for a booking;
-    - see a declined card give the dates back;
-    - watch the reconciliation job settle a payment whose answer was lost;
-    - cancel and get refunded;
-    - see prices in other currencies.
-  - Several earlier parts now show a little more (a booking's `payment`, `v2` cache keys,
-    more audit revisions). They were re-run and updated.
-- [ ] **GitHub:** PR #3 (Phase 4) is still open. Phase 5 is committed on
-      `phase-5-payments`, which starts from Phase 4. Merge PR #3 first, then tell me, and
-      I'll push Phase 5 and open its pull request; it will then show only Phase 5's changes.
-- [ ] **Stripe (optional):** Stripe accounts in India are invite-only, so you may not be able
-      to get test keys. You don't need them: the simulator covers every path. If you do get
-      one, [05 — Payments](05-payments.md) has the steps (not verified by me).
-- [ ] **Gemini API key, for Phase 6** (free, no card): aistudio.google.com → Get API key.
-      Keep it out of the repo; it will go in an environment variable.
+  - **Parts 46–52 are new** (about 25 minutes):
+    - save favourites, and see that saving twice leaves one;
+    - ask a question in plain English **with no AI key** and still get real listings;
+    - see the rules read a city, a party size and a budget out of a sentence;
+    - see the questions that SQL answers exactly ("how much have I spent?");
+    - set a deliberately **wrong** key and watch nothing break.
+  - Part 51 is the only part that needs a Gemini key.
+- [ ] **Gemini API key (optional, free, no card):** aistudio.google.com → "Create API key",
+      then `$env:GEMINI_API_KEY = "AIza..."` in the window you start the app from. With it,
+      Part 51 shows search by meaning and a written answer. Keep it out of the repo.
+- [ ] **GitHub:** Phase 6 is committed on `phase-6-ai`. Tell me when you want it pushed and
+      its pull request opened.
+- [ ] **AWS, for Phase 7:** an account with an S3 bucket and access keys. Signing up needs a
+      card, even on the free tier; if you would rather not, say so and Phase 7 will keep
+      images on local disk behind the same interface.
 
 ### Reading
-- [ ] [05 — Payments, money and currencies](05-payments.md), and answer its interview
-      questions out loud. "What if the server crashes after charging but before confirming
-      the booking?" is the one to get right.
-- [ ] The Phase 5 videos in [section 6](#6-youtube-study-plan--every-phase)
-- [ ] If not done yet: [04 — Auditing, logging and scheduling](04-auditing.md) and the Phase 4 videos
+- [ ] [06 — AI: embeddings, RAG and search that understands](06-ai-rag.md), and answer its
+      interview questions out loud. "How do you stop it recommending listings that do not
+      exist?" is the one to get right.
+- [ ] The Phase 6 videos in [section 6](#6-youtube-study-plan--every-phase)
+- [ ] If not done yet: [05 — Payments, money and currencies](05-payments.md) and the Phase 5
+      videos. "What if the server crashes after charging but before confirming the booking?"
 
 ### Still open from Phase 1
 - [ ] If not done yet: `docker compose down -v` once (old draft V1 in your local volume),
@@ -80,6 +83,80 @@ notes may still mention the previous ids.
 ---
 
 ## 3. Log
+
+### Session 6 — Phase 6: AI, embeddings and RAG (18 Sep 2026)
+
+**Built**
+- **The vector index.** V4 adds `vector_store` (768-number embeddings, HNSW index on cosine
+  distance) and `listing_embeddings` (listing → document, plus a SHA-256 content hash).
+  Flyway owns both; Spring AI's own schema creation is off.
+- **Indexing.** Each listing becomes one piece of text (type, city, title, description,
+  capacity, price, and its type-specific attributes through `typeAttributes()`, so a new
+  property type needs no change here). It is re-embedded only when that text changes, after
+  the commit of the change, on the same event the caches use. A deleted or deactivated
+  listing is removed from the index. A job every two minutes embeds, in batches of 20,
+  anything that was missed — including everything created before a key was set.
+- **Favourites API** (`PUT`/`DELETE /api/properties/{id}/favorite`, `GET /api/favorites`),
+  because the preference profile and the taste vector are built from them.
+- **Preference profile**, entirely from SQL: the cities they save, the price band (converted
+  into the currency most of their favourites use), the party size they book for, the words
+  that keep coming up, and their review count and average rating. The model sees only the
+  one-line summary, never the rows.
+- **Understanding the question with rules**, not an LLM: city (matched against cities that
+  have listings, longest match wins), budget with symbol/code/word, party size ("for 3
+  nights" is not a party size), "like my favourites", and statistics-vs-recommendation.
+- **Hybrid search.** Vector similarity proposes up to 50 candidates; SQL over the live rows
+  keeps only those still active, in the right city, within the per-currency ceiling
+  (Phase 5's `PriceCeilings`), big enough, and not the asker's own; ranking is similarity
+  plus three small profile boosts; the best five are returned.
+- **The taste vector.** "Like my favourites" is the average of the saved listings'
+  embeddings — `avg(embedding)` inside Postgres, no model call, and it never suggests back
+  the listings they already saved.
+- **Statistics mode.** "How much have I spent?", "how many have I saved?", "what do I
+  usually pay?" are answered in SQL, in the caller's language, with money summed per
+  currency and only totalled when every rate is there.
+- **Grounded answers.** One Gemini call, with the candidate listings in the prompt as `[id]`.
+  Afterwards the answer is checked: an id that was not offered is cut out, and an answer
+  whose ids were all invented is thrown away and replaced by one the app writes.
+- **`GET /api/recommendations?q=…&currency=…`** always answers 200, with `aiUsed` and
+  `semantic` saying how much of the AI was actually used.
+- **Degrading.** With no key, an `EnvironmentPostProcessor` switches off the chat model, the
+  embedding model and the vector store before any bean exists, so the app starts normally.
+  A wrong key, an empty index or an exhausted quota each fall back one step further, with a
+  translated sentence saying which.
+- **Tests:** 38 more, 307 in all (205 unit, 102 integration).
+  - Unit: `QueryParserTest`, `ListingEmbeddingServiceTest`, `StatsServiceTest`,
+    `RecommendationServiceTest` (the grounding check, with a model that misbehaves on
+    purpose), `EmbeddingIndexJobScheduleTest`.
+  - Integration: `AiSwitchedOffTest` (the whole app with no key — the spec's requirement, as
+    a test), `AiRecommendationTest` (its own context: fake models, but the real
+    PgVectorStore, the real pgvector container and the real SQL), `FavoriteApiTest`.
+  - **No test needs a Gemini key**, and none calls the network.
+- **Docs:** [06 — AI: embeddings, RAG and search that understands](06-ai-rag.md); hands-on
+  guide Parts 46–52; three listing samples worded to be told apart by meaning; README,
+  CLAUDE.md and the samples README.
+
+**Judgement calls (explained before coding):** D56–D68 below. The notable ones:
+- rules, not an LLM, for reading the question and routing the intent;
+- statistics answered by SQL, never by the model;
+- the taste vector computed by Postgres rather than by a model call;
+- the favourites API brought into this phase, because the profile needs it;
+- `/api/recommendations` answering 200 with `aiUsed: false` instead of an error when the AI
+  is off.
+
+**Verified by hand** on 18 Sep 2026, against throwaway containers (Postgres 55442, Redis
+63801, the app on 8082), never the project's own containers:
+- Parts 46–50 in full: the four-migration start with `ai.mode ready=false`, favourites
+  (including saving twice and deleting twice), a question with no key, the budget filter in
+  rupees and in dollars, the host not being offered their own listing, the four statistics
+  answers, and the empty index;
+- the wrong-key path end to end: the app starts, a listing is still created (201) with a
+  warning, a question still answers in about two seconds, and the backfill job logs one
+  warning per listing.
+- **Not run:** Part 51, which needs a Gemini key. Its mechanics are covered by
+  `AiRecommendationTest` against the real vector store.
+
+**Result:** 307/307 tests passing.
 
 ### Session 5 — Phase 5: payments, money & currencies (15–16 Sep 2026)
 
@@ -476,6 +553,19 @@ Why each non-obvious choice was made. Interviewers love "why".
 | D53 | Idempotency key = booking id + creation time + step; the creation time cut to microseconds when saved | ids repeat after a development database is wiped; the time in memory must equal the time stored |
 | D54 | Exchange rates from ExchangeRate-API's free endpoint, kept in memory (1 h, last good set up to 48 h, 1 min between failed tries, one fetch at a time); shown only on request, never stored or cached | free, no key, has AED (the ECB's rates don't); an outage must never slow every request |
 | D55 | `maxPrice` becomes one ceiling per listing currency, rounded down; INR if no currency is given; without rates only same-currency listings, flagged and not cached; currency in the cache key; key prefix v2 | a fair comparison without storing converted prices; old searches keep their meaning; rounding never lets an over-budget listing in |
+| D56 | A favourites API in Phase 6 (`PUT`/`DELETE`/`GET`), idempotent by design | the preference profile and the taste vector are built from favourites, and nothing created any; a `PUT` says "let this be saved", which stays true however often it is sent |
+| D57 | Rules, not an LLM, read the question and route the intent | what needs reading is three crisp things; a parser is deterministic, unit-testable, instant and free, where a model would add a second network call and a second failure mode before any work started |
+| D58 | "Like my favourites" is the average of their embeddings, computed in Postgres (`avg(embedding)`) | a taste for nothing: no model call, no vectors loaded into Java, and the listings they already saved are excluded |
+| D59 | Questions about their own numbers are answered in SQL, never by the model | a sum has exactly one right answer; a model would cost quota and can be confidently wrong |
+| D60 | Flyway creates the vector table (V4, 768 dimensions, HNSW, cosine); Spring AI schema init off | one owner for the schema, `ddl-auto: validate` keeps working, and 3,072 dimensions could not be indexed at all |
+| D61 | A document id derived from the listing id, plus a SHA-256 hash of the embedded text; the price in that text rounded to the currency's decimals | one listing is always one document, an edit replaces it, and an unchanged listing costs no embedding call |
+| D62 | Listings are indexed after commit on the existing `PropertyChangedEvent`, never throwing, with a backfill job every 2 minutes in batches of 20 | only a committed change is true; embedding is a network call; the free tier allows a few calls a minute, and everything created before a key existed still needs indexing |
+| D63 | Every listing is shown to the model as `[id]`, and the answer is checked afterwards: invented ids removed, an all-invented answer discarded | a prompt is a request, a check is a rule; it holds whatever the model does next month |
+| D64 | `/api/recommendations` always answers 200, with `aiUsed` and `semantic` flags and a translated sentence | the AI being off is not the caller's error, and a client can show the listings whatever happened |
+| D65 | With no key, an `EnvironmentPostProcessor` switches off chat, embeddings and the vector store, and excludes the Gemini embedding connection auto-configuration | the vector store takes the embedding model as a constructor argument, so the app would not start at all; a missing credential may only cost its own feature |
+| D66 | The tests fake only the two models; the vector store, pgvector, the SQL and the checks are real | a real key would make the build need a secret, cost quota and vary between runs |
+| D67 | Ranking = similarity plus small profile boosts (0.05 city, 0.05 price band, 0.03 capacity), 50 candidates narrowed to 5 | the question in front of us beats habit, and a boost must never lift a listing that means nothing like it above one that does |
+| D68 | A suggestion carries its `similarity`, and `displayPrice` only when `?currency=` was asked for | anyone reviewing the project can see why a listing was suggested; a converted price at a rate of 1 says nothing |
 
 ---
 
@@ -512,6 +602,14 @@ Each of these is a good "tell me about a problem you solved" story.
 | 5.26 | No way to get Stripe keys (found while planning) | Stripe accounts in India are invite-only | the payment simulator (D48): every payment path works, and is tested, without an account |
 | 5.27 | A wiped development database could make Stripe replay an old payment (caught in design) | booking ids start again at 1, and Stripe remembers idempotency keys for 24 hours | the key includes the booking's creation time, cut to microseconds when it's saved, so the time in memory equals the one stored |
 | 5.28 | The hands-on guide's audit revision numbers stopped matching (Parts 31–33) | a booking now takes three transactions (held, payment recorded, paid), so it makes three revisions | re-ran Parts 28–34 and updated every number |
+| 6.1 | With no key the app still tried to build Gemini and refused to start, although an `EnvironmentPostProcessor` was meant to switch it off | in Boot 4 those are discovered as `org.springframework.boot.EnvironmentPostProcessor` in `META-INF/spring.factories`; the older `org.springframework.boot.env` name, and its `.imports` file, are ignored without a word | registered under the new name. `AiSwitchedOffTest` now fails if it ever stops running |
+| 6.2 | It still failed: "Google GenAI project-id must be set!" | the Gemini *embedding connection* auto-configuration has no property switch of its own, so switching the embedding model off did not stop it | excluded outright with `spring.autoconfigure.exclude` when there is no key |
+| 6.3 | Switching off only the two models would not have been enough (caught while planning, by reading the class file) | `PgVectorStoreAutoConfiguration` takes the `EmbeddingModel` as a constructor argument, so it fails while the context is built | the vector store is switched off too; everything asks `AiAvailability` before using any of them |
+| 6.4 | A listing was re-embedded on every run of the job, although nothing had changed | the embedded text carried the price as written: `9000.00` when built from the request, `9000.0000` when read back from `NUMERIC(19,4)`, so the content hash differed | the text rounds the price to the currency's own decimals; a unit test pins it. Lesson: anything hashed must be normalised first |
+| 6.5 | With a deliberately wrong key, the backfill job died with a scheduler stack trace and abandoned the rest of the batch | the embedding failure escaped the loop | one listing at a time, each failure logged as `ai.listing.embedFailed`, like the other jobs. Found by hand, not by a test |
+| 6.6 | In the AI integration test, only one of two listings ever came back from the vector store | the fake embedding model gave texts with no shared words vectors at exactly right angles, and a vector store drops similarity 0 | the fake adds a small constant direction to every vector, which is how real embeddings behave — two English sentences are never orthogonal |
+| 6.7 | "What do I usually pay for my favourites?" was answered with listings instead of a number | the intent rules had no word for "usually" or "pay", and "rating" was not a subject | both lists widened, with tests for each phrasing. Found by hand while writing the guide |
+| 6.8 | Every answer carried a `displayPrice` equal to the real price at a rate of 1 | the recommendation endpoint converted into the default currency even when none was asked for | it converts only when `?currency=` is given, as everywhere else since Phase 5 |
 | 5.19 | The history rewrite was undone right after it ran | the recovery command (`git reset --hard refs/original/…`), meant only for when a check failed, was listed with a Run button among the steps and got run | `git reflog` still listed the rewritten `main` (`5305753`), so `git reset --hard 5305753` and a force-push restored it. Lesson: Git rarely loses a commit, because the reflog records every position a branch has had |
 
 ---
@@ -687,7 +785,7 @@ None are needed yet, and each is optional because the app works without it.
 | Phase | Account | Where | Cost |
 |---|---|---|---|
 | 5 | Stripe (test mode keys). Optional: invite-only in India, and the simulator covers every path | stripe.com | free |
-| 6 | Gemini API key | aistudio.google.com | free tier, no card |
+| 6 | Gemini API key. Optional: the app boots, indexes nothing and still answers questions from ordinary search without it | aistudio.google.com | free tier, no card |
 | 7 | AWS (S3 bucket + access keys) | aws.amazon.com | free tier, but signup needs a card |
 | 9 | GitHub (for Render to deploy from) | github.com | free — ✅ already set up |
 | 9 | Render | render.com (sign in with GitHub) | free tier |

@@ -7,6 +7,37 @@ spring:
     # Render sets SPRING_PROFILES_ACTIVE=render instead.
     default: local
 
+  # Gemini through the Developer API: a plain key from Google AI Studio, not Vertex AI
+  # (which would need a Google Cloud project and a service account). With no key set,
+  # AiEnvironmentPostProcessor switches all of this off and the app runs without AI.
+  ai:
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY:}
+        chat:
+          options:
+            model: gemini-2.5-flash
+            # Low, not zero: a recommendation should read naturally but stay predictable.
+            temperature: 0.2
+        embedding:
+          api-key: ${GEMINI_API_KEY:}
+          text:
+            options:
+              model: gemini-embedding-001
+              # 768 numbers per listing: pgvector's index stops at 2,000 dimensions,
+              # and this model's default is 3,072.
+              dimensions: 768
+              # One task type for both sides: the vector store embeds search queries with this
+              # same model bean, so documents and queries are compared like with like.
+              task-type: SEMANTIC_SIMILARITY
+    vectorstore:
+      pgvector:
+        # Flyway owns the schema (V4); the store must never create or alter tables.
+        initialize-schema: false
+        dimensions: 768
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+
   datasource:
     # Assembled from parts rather than taken as one URL: Render provides host, port,
     # database, user and password separately, and its ready-made connection string
@@ -146,3 +177,15 @@ rentalhub:
       # than a live payment can take (Stripe's read timeout times its retries), so the job
       # never races a payment that is still under way.
       stale-after: ${PAYMENT_STALE_AFTER:10m}
+  # The AI features; see ai/ and docs/learning/06-ai-rag.md.
+  ai:
+    # How many listings the vector search brings back before the SQL filters run.
+    # Wider than the answer needs, because the filters will drop some of them.
+    candidates: 50
+    # The most listings one recommendation may mention.
+    max-recommendations: 5
+    # Listings are embedded as soon as they change. This job picks up the ones that
+    # were missed: created while no key was set, or an embedding call that failed.
+    index-job:
+      cron: "${EMBEDDING_INDEX_CRON:0 0/2 * * * *}"
+      batch-size: 20

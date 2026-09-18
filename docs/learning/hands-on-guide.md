@@ -1,14 +1,17 @@
 # Hands-on guide: test RentalHub yourself
 
-Everything built so far (Phases 1–5), tested by you, step by step. Each step has the
+Everything built so far (Phases 1–6), tested by you, step by step. Each step has the
 exact PowerShell command and what you should see. Every command and expected output here
 was run and checked against a fresh database: Parts 0–17 on 13 Sep 2026, Parts 18–26 on
-14 Sep 2026, Parts 28–34 on 15 Sep 2026, and Parts 36–44 on 16 Sep 2026. Phase 5 changed
-what some earlier parts print (bookings are now paid for, cache keys gained a currency),
-so those parts were run again on 16 Sep 2026 and updated.
+14 Sep 2026, Parts 28–34 on 15 Sep 2026, Parts 36–44 on 16 Sep 2026, and Parts 46–50 on
+18 Sep 2026. Phase 5 changed what some earlier parts print (bookings are now paid for,
+cache keys gained a currency), so those parts were run again on 16 Sep 2026 and updated.
+Part 51 is the one exception: it needs a Gemini key, so it says what to expect rather
+than what was seen.
 
 **Time:** about 45 minutes for Parts 0–17 (Phases 1–2), 30 more for Parts 18–26
-(Phase 3), 30 more for Parts 28–34 (Phase 4), and 30 more for Parts 36–44 (Phase 5).
+(Phase 3), 30 more for Parts 28–34 (Phase 4), 30 more for Parts 36–44 (Phase 5), and
+25 more for Parts 46–52 (Phase 6).
 **You'll use three PowerShell windows:**
 
 | Window | Used for |
@@ -1887,9 +1890,384 @@ Open `src/test/java/com/rentalhub/domain/model/MoneyMathTest.java`. Each test is
 
 ---
 
+# Phase 6 — AI: favourites, search by meaning and grounded answers (Parts 46–52)
+
+One more fresh start. Everything in Parts 46–50 runs **without any AI key**, because the rule
+for this project is that a missing credential costs you its own feature and nothing else.
+Part 51 is the only part that needs a Gemini key, and it is free to get.
+
+## Part 46 — A fresh start, with the AI off
+
+1. Stop the app: `Ctrl+C` in Window 1.
+2. In Window 2, wipe the database and start the containers again:
+
+   ```powershell
+   docker compose down -v
+   ```
+
+   ```powershell
+   docker compose up -d
+   ```
+
+3. In Window 1, start the app with the index job running every 20 seconds instead of every
+   two minutes, so you don't wait around in Part 51:
+
+   ```powershell
+   $env:EMBEDDING_INDEX_CRON = "0,20,40 * * * * *"
+   ```
+
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   ✅ Flyway now runs **four** migrations, and the AI reports itself off:
+   ```
+   Migrating schema "public" to version "4 - ai index"
+   Successfully applied 4 migrations to schema "public", now at version v4
+   ai.mode ready=false chatModel=false embeddingModel=false vectorStore=false
+   ```
+   `ready=false` and three `false`s: with no `GEMINI_API_KEY`, the chat model, the embedding
+   model and the vector store beans are not created at all (see
+   `ai/AiEnvironmentPostProcessor`). The application starts anyway, which is the point.
+
+4. In Window 2, create two users and the three listings this phase uses. They are worded to
+   be easy to tell apart by *meaning*: a calm garden villa, a noisy nightlife flat, a snowy
+   cabin.
+
+   ```powershell
+   docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "INSERT INTO users (full_name, email, role) VALUES ('Asha Menon','asha@example.com','HOST'), ('Ravi Kumar','ravi@example.com','GUEST') RETURNING id, full_name, role;"
+   ```
+
+   ```powershell
+   curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/villa-quiet-garden.json"
+   ```
+
+   ```powershell
+   curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/apartment-nightlife.json"
+   ```
+
+   ```powershell
+   curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/cabin-snow-view.json"
+   ```
+
+   ✅ Users 1 (host) and 2 (guest), then `201` three times: listing 1 is the quiet villa in
+   Goa (₹9,000), listing 2 the nightlife flat in Goa (₹4,000), listing 3 the snow cabin in
+   Manali (₹6,000).
+
+---
+
+## Part 47 — Save a favourite (and save it twice)
+
+Favourites arrived in this phase because the preference profile and the "taste vector" are
+built from them. Saving is a `PUT`, not a `POST`: it says "let this listing be saved", which
+stays true however many times you send it.
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X PUT http://localhost:8081/api/properties/1/favorite -H "X-Demo-User-Id: 2"
+```
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X PUT http://localhost:8081/api/properties/3/favorite -H "X-Demo-User-Id: 2"
+```
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X PUT http://localhost:8081/api/properties/1/favorite -H "X-Demo-User-Id: 2"
+```
+
+✅ `204` three times. The third one saved nothing new — check:
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT user_id, property_id FROM favorites ORDER BY property_id;"
+```
+
+✅ Two rows, not three:
+```
+ user_id | property_id
+---------+-------------
+       2 |           1
+       2 |           3
+```
+
+Now read them back, with the prices also shown in dollars:
+
+```powershell
+curl.exe -s "http://localhost:8081/api/favorites?currency=USD" -H "X-Demo-User-Id: 2" | ConvertFrom-Json | ConvertTo-Json -Depth 5
+```
+
+✅ Newest first — the cabin, then the villa — each with a `displayPrice` alongside its real
+price (your figures will differ; rates change daily):
+
+```json
+{
+  "listing": {
+    "id": 3,
+    "title": "Snow view cabin",
+    "pricePerNight": 6000.0,
+    "currency": "INR",
+    "displayPrice": { "amount": 62.53, "currency": "USD", "rate": 0.010421, "ratesAsOf": "2026-09-18T00:02:31Z" }
+  },
+  "savedAt": "2026-09-18T09:31:25.959849Z"
+}
+```
+
+Take one away, twice:
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X DELETE http://localhost:8081/api/properties/3/favorite -H "X-Demo-User-Id: 2"
+```
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X DELETE http://localhost:8081/api/properties/3/favorite -H "X-Demo-User-Id: 2"
+```
+
+✅ `204` both times: removing something that isn't saved is not an error. Put it back before
+the next part:
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X PUT http://localhost:8081/api/properties/3/favorite -H "X-Demo-User-Id: 2"
+```
+
+---
+
+## Part 48 — Ask a question with no AI key at all
+
+```powershell
+curl.exe -s "http://localhost:8081/api/recommendations?q=somewhere%20quiet%20with%20a%20garden%20in%20Goa%20for%202" -H "X-Demo-User-Id: 2" | ConvertFrom-Json | ConvertTo-Json -Depth 5
+```
+
+✅ **200**, with real listings and an honest explanation:
+
+```
+"answer": "Search by meaning is off because no Gemini key is configured. These 2 listing(s)
+           come from an ordinary filtered search.",
+"intent": "RECOMMEND",
+"aiUsed": false,
+"semantic": false,
+```
+
+Both Goa listings come back (the cabin in Manali does not — "in Goa" was read as a filter and
+applied in SQL), and each `suggestion` has `"similarity": null`, because nothing was ranked by
+meaning. Note that the *rules* still did their work with no model anywhere: city Goa, party
+size 2.
+
+**The budget is real SQL, in each listing's own currency.** Ask for something cheaper:
+
+```powershell
+curl.exe -s "http://localhost:8081/api/recommendations?q=somewhere%20in%20Goa%20under%205000" -H "X-Demo-User-Id: 2" | ConvertFrom-Json | Select-Object -ExpandProperty suggestions | ForEach-Object { $_.listing.id, $_.listing.title, $_.listing.pricePerNight }
+```
+
+✅ Only listing 2, the ₹4,000 flat. And in dollars, with the ceiling converted for you:
+
+```powershell
+curl.exe -s "http://localhost:8081/api/recommendations?q=anywhere%20under%20`$60%20a%20night&currency=USD" -H "X-Demo-User-Id: 2" | ConvertFrom-Json | Select-Object -ExpandProperty suggestions | ForEach-Object { "$($_.listing.title): $($_.listing.pricePerNight) $($_.listing.currency) = $($_.listing.displayPrice.amount) USD" }
+```
+
+✅ `Nightlife flat above the bars: 4000 INR = 41.69 USD` — and nothing else, because $60 is
+about ₹5,757 today, so the ₹6,000 cabin and ₹9,000 villa are over the line. (In PowerShell the
+backtick before `$60` stops it being read as a variable.)
+
+**Nobody is recommended their own listing.** Ask as the host:
+
+```powershell
+curl.exe -s "http://localhost:8081/api/recommendations?q=anywhere%20in%20Goa" -H "X-Demo-User-Id: 1" | ConvertFrom-Json | Select-Object answer, @{n='suggestions';e={$_.suggestions.Count}}
+```
+
+✅ `Nothing on the site matches that. Try a wider budget, another city, or fewer guests.` with
+`suggestions 0` — Asha owns all three.
+
+**And nothing has been indexed**, because there is nothing to index with:
+
+```powershell
+docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT (SELECT count(*) FROM vector_store) AS documents, (SELECT count(*) FROM listing_embeddings) AS indexed, (SELECT count(*) FROM properties) AS listings;"
+```
+
+✅
+```
+ documents | indexed | listings
+-----------+---------+----------
+         0 |       0 |        3
+```
+
+---
+
+## Part 49 — The questions a model must never answer
+
+Some questions have exactly one right answer. Those are routed to SQL and never reach a model
+— which is why they work perfectly here, with no key.
+
+```powershell
+"how many listings have I saved", "what do I usually pay for my favourites", "how much have I spent on bookings", "how many stays have I booked" | ForEach-Object { $q = [uri]::EscapeDataString($_); $a = (curl.exe -s "http://localhost:8081/api/recommendations?q=$q" -H "X-Demo-User-Id: 2" | ConvertFrom-Json); "{0,-42} {1,-10} {2}" -f $_, $a.intent, $a.answer }
+```
+
+✅ Four `STATS` answers, all exact:
+
+```
+how many listings have I saved             STATS      You have saved 2 listing(s), mostly in Manali, Goa.
+what do I usually pay for my favourites    STATS      Your saved listings cost between 6,000.00 and 9,000.00 INR a night.
+how much have I spent on bookings          STATS      You have not paid for any bookings yet.
+how many stays have I booked               STATS      You have made 0 booking(s): 0 confirmed and 0 cancelled.
+```
+
+Now one that only *sounds* like a statistics question:
+
+```powershell
+curl.exe -s "http://localhost:8081/api/recommendations?q=how%20many%20guests%20can%20the%20villa%20sleep" -H "X-Demo-User-Id: 2" | ConvertFrom-Json | Select-Object intent
+```
+
+✅ `RECOMMEND`. "How many" alone isn't enough: the rule needs a measure **and** a subject about
+the guest's own history (favourites, bookings, reviews).
+
+---
+
+## Part 50 — What a *wrong* key does
+
+Credentials go stale, get revoked, and run out of quota. Prove it doesn't matter:
+
+1. `Ctrl+C` in Window 1, then:
+
+   ```powershell
+   $env:GEMINI_API_KEY = "not-a-real-key"
+   ```
+
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   ✅ It starts, and now believes it has AI (it cannot know a key is bad until it uses one):
+   ```
+   ai.mode ready=true chatModel=true embeddingModel=true vectorStore=true
+   ```
+
+2. In Window 2, create a listing:
+
+   ```powershell
+   curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/studio.json"
+   ```
+
+   ✅ `201` in about a second, and in Window 1 a **warning**, not an error:
+   ```
+   WARN ... ai.index.failed propertyId=4 error=400 . API key not valid. Please pass a valid API key.
+   ```
+   The listing is saved. Indexing it is a separate, optional step that failed.
+
+3. Ask a question:
+
+   ```powershell
+   curl.exe -s "http://localhost:8081/api/recommendations?q=somewhere%20quiet%20with%20a%20garden%20in%20Goa" -H "X-Demo-User-Id: 2" | ConvertFrom-Json | Select-Object answer, aiUsed, semantic
+   ```
+
+   ✅ An answer in a couple of seconds, with the real listings:
+   ```
+   answer   : Here are the 2 closest matches. No listing has been indexed for search by
+              meaning yet, so this is an ordinary filtered search.
+   aiUsed   : False
+   semantic : False
+   ```
+   and in Window 1, two warnings naming what failed:
+   ```
+   WARN ... ai.search.failed reason=ClientException error=400 . API key not valid. ...
+   WARN ... ai.answer.failed reason=RuntimeException error=Failed to generate content
+   ```
+
+4. Watch the backfill job try, and fail, politely. Within 20 seconds Window 1 shows one line
+   per listing:
+
+   ```
+   WARN ... ai.listing.embedFailed propertyId=1 error=400 . API key not valid. ...
+   WARN ... ai.listing.embedFailed propertyId=2 error=400 . API key not valid. ...
+   ```
+
+   One failure doesn't abandon the batch, and nothing is lost: the listings are simply still
+   on the job's list next time.
+
+5. Undo it before the next part:
+
+   ```powershell
+   Remove-Item Env:GEMINI_API_KEY
+   ```
+
+---
+
+## Part 51 — With a real Gemini key *(optional; this is the only part that needs one)*
+
+> **Not run for this guide.** Everything above was run and its output pasted in; this part
+> needs a key of your own, so the outputs below are what to expect rather than a transcript.
+> The same behaviour is covered end to end by `AiRecommendationTest`, which runs the real
+> vector store with fake models.
+
+1. Get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) →
+   "Create API key". Then in Window 1 (`Ctrl+C` first):
+
+   ```powershell
+   $env:GEMINI_API_KEY = "AIza..."
+   ```
+
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   ✅ `ai.mode ready=true chatModel=true embeddingModel=true vectorStore=true`, and within
+   20 seconds the index job embeds the listings created earlier:
+   ```
+   ai.listing.embedded propertyId=1 characters=...
+   job.embeddingIndex.finished embedded=4 propertyIds=[1, 2, 3, 4]
+   ```
+
+2. Look at what it stored:
+
+   ```powershell
+   docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT e.property_id, p.title, left(v.embedding::text, 40) AS first_numbers FROM listing_embeddings e JOIN vector_store v ON v.id = e.document_id JOIN properties p ON p.id = e.property_id ORDER BY e.property_id;"
+   ```
+
+   ✅ One row per listing, each with 768 numbers, of which you see the first few.
+
+3. Ask for something by **meaning**, using none of the listing's own words:
+
+   ```powershell
+   curl.exe -s "http://localhost:8081/api/recommendations?q=a%20peaceful%20place%20to%20read%20a%20book%20outdoors" -H "X-Demo-User-Id: 2" | ConvertFrom-Json | Select-Object answer, aiUsed, semantic
+   ```
+
+   ✅ `aiUsed: True`, `semantic: True`, and an answer of a few sentences that names the quiet
+   garden villa by its id, e.g. *"[1] Quiet garden villa would suit you: a shaded garden and
+   no traffic, ₹9,000 a night for six."* The word "peaceful" appears nowhere in the listing.
+
+4. Ask for more of what they save:
+
+   ```powershell
+   curl.exe -s "http://localhost:8081/api/recommendations?q=somewhere%20like%20my%20favourites" -H "X-Demo-User-Id: 2" | ConvertFrom-Json | Select-Object -ExpandProperty suggestions | ForEach-Object { "$($_.listing.id) $($_.listing.title) $([math]::Round($_.similarity,3))" }
+   ```
+
+   ✅ The listings they have **not** saved, ordered by how close they are to the average of
+   the ones they have — computed by Postgres, with no model call (`avg(embedding)`).
+
+5. To watch the grounding check work, you would need the model to misbehave; it usually
+   doesn't. `RecommendationServiceTest` and `AiRecommendationTest` make it invent a listing on
+   purpose and prove the invented id is cut out — and that an answer made entirely of invented
+   ids is thrown away, leaving the real listings and a plain sentence.
+
+---
+
+## Part 52 — Clean up
+
+- Stop the app: `Ctrl+C` in Window 1 (or ⏹ in IntelliJ).
+- Clear the settings you set for this phase, if you want the defaults back:
+  ```powershell
+  Remove-Item Env:EMBEDDING_INDEX_CRON
+  ```
+- Stop the containers but keep the data:
+  ```powershell
+  docker compose stop
+  ```
+- Or remove them **and wipe the data**:
+  ```powershell
+  docker compose down -v
+  ```
+
+---
+
 ## What you just proved
 
-- [ ] All 269 automated tests pass on your machine
+- [ ] All 307 automated tests pass on your machine
 - [ ] Flyway built the schema; the double-booking rule and CHECK constraints are in Postgres
 - [ ] The factory builds each type and enforces each type's rules (400s with the field)
 - [ ] Permissions: guests can't create; only the owner edits (403s)
@@ -1924,6 +2302,14 @@ Open `src/test/java/com/rentalhub/domain/model/MoneyMathTest.java`. Each test is
 - [ ] "Under $100" compares listings priced in rupees, dirhams and pounds, each in its own currency
 - [ ] A converted total is shown but never stored: the row and its history stay in the listing's currency
 - [ ] `double` gets a three-night total wrong, and loses a paisa converting to the smallest unit; `BigDecimal` doesn't
+- [ ] Saving a listing twice leaves one favourite, and removing one that isn't saved is not an error
+- [ ] With no AI key the app starts, says so in one log line, and questions still answer 200 with real listings
+- [ ] The rules read the city, the party size and the budget out of a sentence with no model involved
+- [ ] "Under $60 a night" excludes a ₹6,000 listing, converted per currency as in Phase 5
+- [ ] Nobody is recommended their own listing
+- [ ] "How much have I spent?" is answered by SQL, exactly, with or without a key
+- [ ] A wrong key doesn't break anything: listings are still created and questions still answered, with warnings naming the failure
+- [ ] The backfill job logs one warning per listing instead of abandoning the batch
 
 ---
 
@@ -1953,6 +2339,12 @@ Open `src/test/java/com/rentalhub/domain/model/MoneyMathTest.java`. Each test is
 | Part 42: `"displayPrice":null` and `"exchangeRatesUnavailable":true` | the app couldn't reach the exchange-rate provider (no internet, or its rate limit) | it tries again a minute later; prices in their own currency still work |
 | Part 42–43: your converted figures differ from the guide's | exchange rates change every day | expected: only the shape of the answer matters |
 | A reference starts `sim_pi_` where you expected `pi_` | no `STRIPE_SECRET_KEY`, so the simulator took the payment | that's the default; [05 — Payments](05-payments.md) shows how to use a real test key |
+| Part 48: `"aiUsed": false` and `"semantic": false` | no `GEMINI_API_KEY` — the expected state for Parts 46–50 | Part 51 shows what changes with a key |
+| Part 48: `The term '$60' is not recognized` | PowerShell read `$60` as a variable | keep the backtick: ``` `$60 ``` |
+| Part 49: a question you expected to be `STATS` comes back `RECOMMEND` | the rules need a measure *and* a subject about your own history | phrase it like "how much have I spent on **bookings**" |
+| Part 51: `ai.mode ready=false` although you set the key | the variable was set in a different window, or after the app started | set it in Window 1, then start the app |
+| Part 51: `429 RESOURCE_EXHAUSTED` in the log | Gemini's free tier rate limit | it retries on the next job run; questions still answer without it |
+| Part 51: `vector_store` stays empty | the index job is off (`-`) or the key is rejected | check Window 1 for `ai.listing.embedFailed` |
 
 **Tip:** to see a JSON response nicely indented, pipe it through PowerShell:
 `curl.exe -s http://localhost:8081/api/properties/1 | ConvertFrom-Json | ConvertTo-Json -Depth 5`

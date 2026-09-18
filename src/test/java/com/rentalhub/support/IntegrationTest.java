@@ -27,7 +27,10 @@ import java.util.Objects;
  *
  * What the application would otherwise reach out to is pinned down:
  * <ul>
- *   <li>both scheduled jobs are switched off ("-"): they run only when a test calls them;</li>
+ *   <li>every scheduled job is switched off ("-"): they run only when a test calls them;</li>
+ *   <li>no Gemini key is set, so this context is also the proof the spec asks for: the whole
+ *       application boots and works with the AI switched off. Tests that need the AI features
+ *       use their own context with fake models (see ai/FakeAiModels);</li>
  *   <li>exchange rates are fixed (FixedExchangeRates), so no test depends on the network;</li>
  *   <li>no Stripe key is set, so payments go to the simulator, which answers to Stripe's
  *       test payment-method ids.</li>
@@ -35,7 +38,8 @@ import java.util.Objects;
  */
 @SpringBootTest(properties = {
         "rentalhub.jobs.stale-listings.cron=-",
-        "rentalhub.jobs.payment-reconciliation.cron=-"})
+        "rentalhub.jobs.payment-reconciliation.cron=-",
+        "rentalhub.ai.index-job.cron=-"})
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, FixedExchangeRates.class})
 public abstract class IntegrationTest {
@@ -52,7 +56,8 @@ public abstract class IntegrationTest {
         // transaction unusable after a deliberate constraint violation.
         if (!TestTransaction.isActive()) {
             jdbc.execute("TRUNCATE TABLE bookings, favorites, reviews, property_images, properties, users, "
-                    + "properties_aud, bookings_aud, reviews_aud, revinfo RESTART IDENTITY CASCADE");
+                    + "properties_aud, bookings_aud, reviews_aud, revinfo, "
+                    + "vector_store, listing_embeddings RESTART IDENTITY CASCADE");
         }
         // invalidate(), not clear(): clear() may finish after the next test has started.
         cacheManager.getCacheNames().forEach(name -> Objects.requireNonNull(cacheManager.getCache(name)).invalidate());

@@ -10,7 +10,7 @@ import com.rentalhub.dto.PropertyView;
  * Callers must have loaded what is read here (host and images for a view), because
  * with open-in-view off there is no database session left to lazy-load them.
  */
-final class PropertyViews {
+public final class PropertyViews {
 
     private PropertyViews() {
     }
@@ -41,7 +41,7 @@ final class PropertyViews {
                 null);
     }
 
-    static PropertySummary toSummary(Property property, String coverImageUrl) {
+    public static PropertySummary toSummary(Property property, String coverImageUrl) {
         return new PropertySummary(
                 property.getId(),
                 property.getType(),
