@@ -1,17 +1,20 @@
 # Hands-on guide: test RentalHub yourself
 
-Everything built so far (Phases 1–6), tested by you, step by step. Each step has the
+Everything built so far (Phases 1–7), tested by you, step by step. Each step has the
 exact PowerShell command and what you should see. Every command and expected output here
 was run and checked against a fresh database: Parts 0–17 on 13 Sep 2026, Parts 18–26 on
-14 Sep 2026, Parts 28–34 on 15 Sep 2026, Parts 36–44 on 16 Sep 2026, and Parts 46–50 on
-18 Sep 2026. Phase 5 changed what some earlier parts print (bookings are now paid for,
-cache keys gained a currency), so those parts were run again on 16 Sep 2026 and updated.
-Part 51 is the one exception: it needs a Gemini key, so it says what to expect rather
-than what was seen.
+14 Sep 2026, Parts 28–34 on 15 Sep 2026, Parts 36–44 on 16 Sep 2026, Parts 46–50 on
+18 Sep 2026, and Parts 53–61 on 18–19 Sep 2026. Phase 5 changed what some earlier parts
+print (bookings are now paid for, cache keys gained a currency), so those parts were run
+again on 16 Sep 2026 and updated. Phase 7 changed two things earlier parts show: Spring's
+own error messages are now the app's (Part 9, rows 8 and 11; Part 21, row 8), and the
+cache keys start `rentalhub:v3:` (a listing's photos gained an id); both were checked and
+updated on 19 Sep 2026. Part 51 is the one exception: it needs a Gemini key, so it says
+what to expect rather than what was seen.
 
 **Time:** about 45 minutes for Parts 0–17 (Phases 1–2), 30 more for Parts 18–26
-(Phase 3), 30 more for Parts 28–34 (Phase 4), 30 more for Parts 36–44 (Phase 5), and
-25 more for Parts 46–52 (Phase 6).
+(Phase 3), 30 more for Parts 28–34 (Phase 4), 30 more for Parts 36–44 (Phase 5),
+25 more for Parts 46–52 (Phase 6), and 40 more for Parts 53–62 (Phase 7).
 **You'll use three PowerShell windows:**
 
 | Window | Used for |
@@ -271,10 +274,10 @@ human-readable `detail`, a machine-readable `messageKey` and, where it applies, 
 | 5 | POST `cabin-unknown-heating.json` as user 1 | 400 | `property.attribute.choice` — "Heating must be one of the listed options." |
 | 6 | POST `invalid-blank-fields.json` as user 1 | 400 | an `errors` list: `city` and `title` — "This field is required." |
 | 7 | POST `villa.json` as **user 2** (a guest) | 403 | `property.create.notHost` |
-| 8 | POST `villa.json` with **no** `X-Demo-User-Id` header | 400 | "Required header 'X-Demo-User-Id' is not present." |
+| 8 | POST `villa.json` with **no** `X-Demo-User-Id` header | 400 | "The X-Demo-User-Id header is required." |
 | 9 | PUT `villa-renamed.json` to `/1` as **user 3** (another host) | 403 | `property.notOwner` |
 | 10 | PUT `studio.json` to `/1` as user 1 | 400 | `property.type.cannotChange` |
-| 11 | `curl.exe -s -i http://localhost:8081/api/properties/abc` | 400 | "Failed to convert 'id' with value: 'abc'" |
+| 11 | `curl.exe -s -i http://localhost:8081/api/properties/abc` | 400 | `"abc" is not a valid value for id.` |
 
 How to send them (swap the file name, user id or method as the table says):
 
@@ -299,11 +302,11 @@ docker exec rentalhub-redis redis-cli --scan --pattern "rentalhub:*"
 ✅ One listing key and four search keys, one per *distinct* search from Part 8 (Redis
 lists them in no particular order):
 ```
-rentalhub:v2:propertyById::1
-rentalhub:v2:propertySearch::city:goa|guests:|maxPrice:|currency:|page:0|size:20
-rentalhub:v2:propertySearch::city:|guests:6|maxPrice:|currency:|page:0|size:20
-rentalhub:v2:propertySearch::city:|guests:|maxPrice:3000|currency:INR|page:0|size:20
-rentalhub:v2:propertySearch::city:|guests:|maxPrice:|currency:|page:0|size:20
+rentalhub:v3:propertyById::1
+rentalhub:v3:propertySearch::city:goa|guests:|maxPrice:|currency:|page:0|size:20
+rentalhub:v3:propertySearch::city:|guests:6|maxPrice:|currency:|page:0|size:20
+rentalhub:v3:propertySearch::city:|guests:|maxPrice:3000|currency:INR|page:0|size:20
+rentalhub:v3:propertySearch::city:|guests:|maxPrice:|currency:|page:0|size:20
 ```
 (Search pages expire after 5 minutes, so if you're slow some may already be gone. That's
 the TTL doing its job.)
@@ -314,13 +317,13 @@ Two things in these keys are from Phase 5:
 - **`currency:INR`**: a price limit now has a currency. Without one it's read as rupees.
 
 ```powershell
-docker exec rentalhub-redis redis-cli GET "rentalhub:v2:propertyById::1"
+docker exec rentalhub-redis redis-cli GET "rentalhub:v3:propertyById::1"
 ```
 
 ✅ The villa as JSON: this is literally what the cache holds.
 
 ```powershell
-docker exec rentalhub-redis redis-cli TTL "rentalhub:v2:propertyById::1"
+docker exec rentalhub-redis redis-cli TTL "rentalhub:v3:propertyById::1"
 ```
 
 ✅ A number just under `600`: seconds until it expires by itself.
@@ -358,11 +361,11 @@ curl.exe -s -i -X PUT http://localhost:8081/api/properties/1 -H "Content-Type: a
 ✅ `HTTP/1.1 200`, `"title":"Sunset villa"`, `"version":1`.
 ✅ Window 3 shows the invalidation, in this order:
 ```
-"DEL" "rentalhub:v2:propertyById::1"
-"SCAN" "0" "MATCH" "rentalhub:v2:propertySearch::city:|*" "COUNT" "1000"
+"DEL" "rentalhub:v3:propertyById::1"
+"SCAN" "0" "MATCH" "rentalhub:v3:propertySearch::city:|*" "COUNT" "1000"
 "DEL" "…city:|guests:6|…" "…city:|guests:|maxPrice:3000|currency:INR|…" "…city:|guests:|maxPrice:|…"
-"SCAN" "0" "MATCH" "rentalhub:v2:propertySearch::city:goa|*" "COUNT" "1000"
-"DEL" "rentalhub:v2:propertySearch::city:goa|guests:|maxPrice:|currency:|page:0|size:20"
+"SCAN" "0" "MATCH" "rentalhub:v3:propertySearch::city:goa|*" "COUNT" "1000"
+"DEL" "rentalhub:v3:propertySearch::city:goa|guests:|maxPrice:|currency:|page:0|size:20"
 ```
 That is the listing evicted, the no-city partition flushed, then the Goa partition flushed
 (found with SCAN, never KEYS). Pages for any other city would have been left alone.
@@ -701,7 +704,7 @@ curl.exe -s -i -X POST http://localhost:8081/api/bookings -H "Content-Type: appl
 | 5 | `booking-missing-fields.json` | 400 | an `errors` list: `checkIn`, `checkOut` and `paymentMethodId` "This field is required.", `guests` "At least one guest must stay." |
 | 6 | `booking-villa.json` as **user 1** (Asha owns the villa) | 403 | `booking.ownListing`: "You cannot book your own listing." |
 | 7 | `booking-unknown-listing.json` | 404 | `property.notFound`: "There is no listing with id 999." |
-| 8 | `booking.json` with **no** `X-Demo-User-Id` header | 400 | "Required header 'X-Demo-User-Id' is not present." |
+| 8 | `booking.json` with **no** `X-Demo-User-Id` header | 400 | "The X-Demo-User-Id header is required." |
 
 **A listing that isn't taking bookings.** Deactivate the villa, as Phase 4's scheduled job
 will do to expired listings:
@@ -1805,14 +1808,14 @@ searches keep meaning exactly what they meant.
 searches:
 
 ```powershell
-docker exec rentalhub-redis redis-cli --scan --pattern "rentalhub:v2:propertySearch*"
+docker exec rentalhub-redis redis-cli --scan --pattern "rentalhub:v3:propertySearch*"
 ```
 
 ✅
 ```
-rentalhub:v2:propertySearch::city:|guests:|maxPrice:10000|currency:INR|page:0|size:20
-rentalhub:v2:propertySearch::city:|guests:|maxPrice:100|currency:USD|page:0|size:20
-rentalhub:v2:propertySearch::city:|guests:|maxPrice:150|currency:USD|page:0|size:20
+rentalhub:v3:propertySearch::city:|guests:|maxPrice:10000|currency:INR|page:0|size:20
+rentalhub:v3:propertySearch::city:|guests:|maxPrice:100|currency:USD|page:0|size:20
+rentalhub:v3:propertySearch::city:|guests:|maxPrice:150|currency:USD|page:0|size:20
 ```
 
 ---
@@ -2265,9 +2268,418 @@ Credentials go stale, get revoked, and run out of quota. Prove it doesn't matter
 
 ---
 
+# Phase 7 — Languages, photos, GraphQL, Swagger and Postman (Parts 53–62)
+
+Parts 53–55 need nothing new. Photos need an S3 bucket, and Parts 56–59 use **MinIO**, a free
+S3-compatible server in Docker, instead of an AWS account. It's in `docker-compose.yml`, but
+only starts when asked.
+
+**Hindi in the console.** Windows PowerShell prints UTF-8 text wrongly unless told otherwise.
+In Window 2, run this once (it lasts until the window closes):
+
+```powershell
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+```
+
+If Hindi still shows as boxes, the console font lacks Devanagari: use **Windows Terminal**
+(it is on Windows 11 already) rather than the old console window.
+
+## Part 53 — A fresh start
+
+1. `Ctrl+C` in Window 1. In Window 2:
+
+   ```powershell
+   docker compose down -v
+   ```
+
+   ```powershell
+   docker compose up -d
+   ```
+
+2. In Window 1, start the app. No new settings yet:
+
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   ✅ Among the startup lines, a new one:
+   ```
+   images.mode storage=NONE reason=no S3_BUCKET: photo uploads are switched off
+   ```
+
+3. In Window 2, the two users and one listing:
+
+   ```powershell
+   docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "INSERT INTO users (full_name, email, role) VALUES ('Asha Menon','asha@example.com','HOST'), ('Ravi Kumar','ravi@example.com','GUEST') RETURNING id, full_name, role;"
+   ```
+
+   ```powershell
+   curl.exe -s -o NUL -w "%{http_code}`n" -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/villa-quiet-garden.json"
+   ```
+
+   ✅ Users 1 (host) and 2 (guest), then `201`: listing 1 is the quiet garden villa in Goa.
+
+---
+
+## Part 54 — One API, three languages
+
+The browser's language (`Accept-Language`) chooses, region and all:
+
+```powershell
+curl.exe -s http://localhost:8081/api/properties/999 -H "Accept-Language: hi-IN,hi;q=0.9,en;q=0.8"
+```
+
+✅
+```
+{"detail":"आईडी 999 वाली कोई लिस्टिंग नहीं है।","instance":"/api/properties/999","status":404,"title":"नहीं मिला","messageKey":"property.notFound"}
+```
+
+`?lang=` beats it, and is remembered in a cookie (`-c` saves cookies to a file, `-b` sends them):
+
+```powershell
+curl.exe -s -c "$env:TEMP\lang.txt" "http://localhost:8081/api/properties/999?lang=es"
+```
+
+```powershell
+curl.exe -s -b "$env:TEMP\lang.txt" http://localhost:8081/api/properties/999
+```
+
+✅ Both in Spanish — the second one with no `?lang=` at all:
+```
+{"detail":"No existe ningún anuncio con id 999.","instance":"/api/properties/999","status":404,"title":"No encontrado","messageKey":"property.notFound"}
+```
+
+A language the app doesn't speak gets English (`-H "Accept-Language: fr-FR"` → `There is no
+listing with id 999.`), and `?lang=fr` isn't remembered.
+
+**Every kind of message follows.** Spring's own error for a missing header, which used to be
+Spring's English (Part 9, row 8):
+
+```powershell
+curl.exe -s -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "Accept-Language: hi" --data "@samples/api/villa.json"
+```
+
+✅ `{"detail":"X-Demo-User-Id हेडर ज़रूरी है।", ... "title":"अनुरोध मान्य नहीं था"}`
+
+Bean validation, field by field:
+
+```powershell
+curl.exe -s -X POST "http://localhost:8081/api/properties?lang=es" -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/invalid-blank-fields.json"
+```
+
+✅
+```
+{"detail":"Algunos campos no son válidos.","instance":"/api/properties","status":400,"title":"La solicitud no es válida","errors":[{"field":"city","message":"Este campo es obligatorio."},{"field":"title","message":"Este campo es obligatorio."}]}
+```
+
+And the AI's answers from Phase 6:
+
+```powershell
+curl.exe -s -o NUL -X PUT http://localhost:8081/api/properties/1/favorite -H "X-Demo-User-Id: 2"
+```
+
+```powershell
+curl.exe -s "http://localhost:8081/api/recommendations?q=how%20many%20listings%20have%20I%20saved&lang=es" -H "X-Demo-User-Id: 2"
+```
+
+✅ `"answer":"Has guardado 1 anuncio(s), sobre todo en Goa."`
+
+---
+
+## Part 55 — A photo, with no storage configured
+
+```powershell
+curl.exe -s -i -X POST http://localhost:8081/api/properties/1/images -H "X-Demo-User-Id: 1" -F "file=@samples/api/photo.jpg"
+```
+
+✅ A clean **503**, with no `Retry-After` (waiting won't help), and the reason:
+```
+HTTP/1.1 503
+{"detail":"Photo uploads are switched off, because no image storage is configured on this server.","instance":"/api/properties/1/images","status":503,"title":"Temporarily unavailable","messageKey":"image.storage.notConfigured"}
+```
+
+Add `?lang=hi` to the URL and the same answer comes in Hindi. Nothing else is affected: the
+listing, bookings and everything before work as usual.
+
+---
+
+## Part 56 — MinIO: an S3 bucket on your machine
+
+1. In Window 2, start MinIO (the `photos` profile is what starts it):
+
+   ```powershell
+   docker compose --profile photos up -d
+   ```
+
+2. Create the bucket, with MinIO's own `mc` tool inside the container:
+
+   ```powershell
+   docker exec rentalhub-minio mc alias set local http://localhost:9000 rentalhub rentalhub-secret
+   ```
+
+   ```powershell
+   docker exec rentalhub-minio mc mb local/rentalhub-photos
+   ```
+
+   ✅
+   ```
+   Added `local` successfully.
+   Bucket created successfully `local/rentalhub-photos`.
+   ```
+   (You can also look at it in a browser: http://localhost:9001, user `rentalhub`, password
+   `rentalhub-secret`.)
+
+3. In Window 1, `Ctrl+C`, set the storage settings, and start the app again. These are the
+   same variables you'd set for real AWS, plus two that only an S3-compatible server needs
+   (`S3_ENDPOINT`, `S3_PATH_STYLE`):
+
+   ```powershell
+   $env:S3_BUCKET = "rentalhub-photos"
+   ```
+
+   ```powershell
+   $env:S3_ENDPOINT = "http://localhost:9000"
+   ```
+
+   ```powershell
+   $env:S3_PATH_STYLE = "true"
+   ```
+
+   ```powershell
+   $env:AWS_REGION = "us-east-1"
+   ```
+
+   ```powershell
+   $env:AWS_ACCESS_KEY_ID = "rentalhub"
+   ```
+
+   ```powershell
+   $env:AWS_SECRET_ACCESS_KEY = "rentalhub-secret"
+   ```
+
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   ✅
+   ```
+   images.mode storage=S3 bucket=rentalhub-photos region=us-east-1 endpoint=http://localhost:9000 credentials=access key
+   ```
+   (The secret is never logged.)
+
+---
+
+## Part 57 — Upload a photo, and get it back
+
+```powershell
+curl.exe -s -i -X POST http://localhost:8081/api/properties/1/images -H "X-Demo-User-Id: 1" -F "file=@samples/api/photo.jpg"
+```
+
+✅ `201`, and a `Location` that is the photo's own URL (your random part will differ):
+```
+HTTP/1.1 201
+Location: http://localhost:8081/images/listings/1/6bb293d4-a000-4439-86c1-fff8129cba63.jpg
+
+{"id":1,"url":"/images/listings/1/6bb293d4-a000-4439-86c1-fff8129cba63.jpg","sortOrder":0}
+```
+
+The listing now shows it:
+
+```powershell
+(Invoke-RestMethod http://localhost:8081/api/properties/1).images | Format-Table -AutoSize
+```
+
+✅
+```
+id url                                                         sortOrder
+-- ---                                                         ---------
+ 1 /images/listings/1/6bb293d4-a000-4439-86c1-fff8129cba63.jpg         0
+```
+
+Fetch it back through the app and compare it with the original:
+
+```powershell
+$url = (Invoke-RestMethod http://localhost:8081/api/properties/1).images[0].url
+```
+
+```powershell
+curl.exe -s -o "$env:TEMP\back.jpg" -w "%{http_code} %{content_type} %{size_download} bytes`n" "http://localhost:8081$url"
+```
+
+```powershell
+(Get-FileHash "$env:TEMP\back.jpg").Hash -eq (Get-FileHash samples\api\photo.jpg).Hash
+```
+
+✅ `200 image/jpeg 7435 bytes`, then `True`: the same bytes. Open
+`http://localhost:8081` + that URL in a browser to see it (a beach at sunset, drawn for these
+samples).
+
+And in the bucket itself:
+
+```powershell
+docker exec rentalhub-minio mc ls --recursive local/rentalhub-photos
+```
+
+✅ `7.3KiB STANDARD listings/1/6bb293d4-….jpg` — the key is random; the uploaded file's name
+was never used.
+
+---
+
+## Part 58 — What gets refused
+
+A PDF renamed to `.jpg` (its first bytes are `%PDF`):
+
+```powershell
+curl.exe -s -X POST http://localhost:8081/api/properties/1/images -H "X-Demo-User-Id: 1" -F "file=@samples/api/not-a-photo.jpg"
+```
+
+✅ `400`, `"messageKey":"image.type.unsupported"`, `"field":"file"`.
+
+A real PNG that claims to be a JPEG (`;type=` sets the declared type):
+
+```powershell
+curl.exe -s -X POST http://localhost:8081/api/properties/1/images -H "X-Demo-User-Id: 1" -F "file=@samples/api/photo.png;type=image/jpeg"
+```
+
+✅
+```
+{"detail":"The file says it is image/jpeg, but its contents are not. Upload a real JPEG, PNG or WebP photo.", ... "messageKey":"image.type.mismatch","field":"file"}
+```
+
+A 6 MB file (over the 5 MB limit), in Hindi:
+
+```powershell
+$bytes = New-Object byte[] 6291456; $bytes[0] = 0xFF; $bytes[1] = 0xD8; $bytes[2] = 0xFF
+```
+
+```powershell
+[IO.File]::WriteAllBytes("$env:TEMP\big.jpg", $bytes)
+```
+
+```powershell
+curl.exe -s -X POST "http://localhost:8081/api/properties/1/images?lang=hi" -H "X-Demo-User-Id: 1" -F "file=@$env:TEMP\big.jpg"
+```
+
+✅ **413**, refused by the API's own error handling, translated:
+```
+{"detail":"अपलोड इस सर्वर की अनुमत सीमा से बड़ा है।","instance":"/api/properties/1/images","status":413,"title":"बहुत बड़ा"}
+```
+
+And the guest trying (`-H "X-Demo-User-Id: 2"` with `photo.jpg`): ✅ `403`,
+`property.notOwner`. None of these left anything in the bucket. A WebP (`photo.webp`) is
+accepted, even though curl declares it `application/octet-stream`: with no real type claimed,
+the bytes decide.
+
+---
+
+## Part 59 — Remove a photo: the row first, then the file
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}`n" -X DELETE http://localhost:8081/api/properties/1/images/1 -H "X-Demo-User-Id: 1"
+```
+
+```powershell
+docker exec rentalhub-minio mc ls --recursive local/rentalhub-photos
+```
+
+✅ `204`, and the bucket listing is empty: the file was deleted after the row's transaction
+committed. (Upload a photo to a listing with no bookings and delete the whole listing, and its
+files go the same way.)
+
+---
+
+## Part 60 — GraphQL
+
+The request bodies are in `samples/api/graphql-*.json` (typing JSON with nested quotes on the
+PowerShell command line is fragile). Upload `photo.jpg` again first (Part 57's command), so the
+search has a photo to show.
+
+```powershell
+curl.exe -s -X POST http://localhost:8081/graphql -H "Content-Type: application/json" -H "Accept-Language: hi" --data "@samples/api/graphql-search.json"
+```
+
+✅ Exactly the fields asked for, the type's name in Hindi, money as an exact string, and each
+listing's host and photos (loaded for the whole page in one query each):
+```
+{"data":{"searchProperties":{"totalElements":1,"content":[{"id":"1","title":"Quiet garden villa","typeLabel":"विला","pricePerNight":"9000.0000","currency":"INR","host":{"fullName":"Asha Menon"},"images":[{"url":"/images/listings/1/….jpg"}]}]}}}
+```
+
+```powershell
+curl.exe -s -X POST "http://localhost:8081/graphql?lang=es" -H "Content-Type: application/json" --data "@samples/api/graphql-detail.json"
+```
+
+✅ The listing's own attributes, labelled in Spanish, with a price in dollars too (your rate
+will differ):
+```
+{"data":{"property":{"title":"Quiet garden villa","typeLabel":"Villa","pricePerNight":"9000.0000","currency":"INR","displayPrice":{"amount":"93.79","currency":"USD"},"attributes":[{"label":"Superficie de la parcela (m²)","value":"500.00","valueLabel":null},{"label":"Piscina privada","value":"true","valueLabel":"Sí"}],"reviews":[]}}}
+```
+
+A booking, as the guest — the same saga as REST:
+
+```powershell
+curl.exe -s -X POST http://localhost:8081/graphql -H "Content-Type: application/json" -H "X-Demo-User-Id: 2" --data "@samples/api/graphql-book.json"
+```
+
+✅ `{"data":{"createBooking":{"id":"1","status":"CONFIRMED","nights":2,"totalAmount":"18000.00","currency":"INR","payment":{"status":"PAID","provider":"SIMULATED"}}}}`
+
+And an error, which in GraphQL is still status 200, with the failure listed:
+
+```powershell
+curl.exe -s -X POST http://localhost:8081/graphql -H "Content-Type: application/json" -H "X-Demo-User-Id: 2" --data "@samples/api/graphql-review.json"
+```
+
+✅
+```
+{"errors":[{"message":"You can review a listing only after a stay there has ended.", ... "extensions":{"messageKey":"review.notStayed","classification":"FORBIDDEN"}}],"data":null}
+```
+
+**In the browser:** open http://localhost:8081/graphiql, paste the query from
+`samples/api/graphql-search.json`, and press ▶. `Ctrl+Space` inside a `{ }` lists the fields
+you can ask for, read from the schema.
+
+---
+
+## Part 61 — Swagger UI and Postman
+
+**Swagger UI:** open http://localhost:8081/swagger-ui.html. Every endpoint is there, grouped
+(Listings, Bookings, Photos, …), each with a description and example payloads. Open *Listings →
+GET /api/properties/{id}*, *Try it out*, type `1`, *Execute*.
+
+**Postman** (the desktop app, free):
+1. *Import* → both files in the `postman\` folder.
+2. Top right, choose the environment **RentalHub local**. It has `baseUrl`
+   (`http://localhost:8081`), `hostId` (1) and `guestId` (2).
+3. *Settings → General → Working directory*: `C:\dev\rentalhub`, so the photo upload finds
+   `samples\api\photo.jpg`.
+4. Right-click the **RentalHub** collection → *Run collection* → *Run RentalHub*.
+
+✅ All 33 requests pass their tests. Three of the review requests *expect* a 404 on a fresh
+database (there is no review yet: the API refuses bookings in the past, so no stay can have
+ended), and the review itself a 403; their descriptions say so.
+
+---
+
+## Part 62 — Clean up
+
+- Stop the app: `Ctrl+C` in Window 1. Clear the storage settings if you want uploads switched
+  off again:
+  ```powershell
+  Remove-Item Env:S3_BUCKET, Env:S3_ENDPOINT, Env:S3_PATH_STYLE, Env:AWS_REGION, Env:AWS_ACCESS_KEY_ID, Env:AWS_SECRET_ACCESS_KEY
+  ```
+- Stop MinIO (its photos are kept in the `rentalhub-photos` volume):
+  ```powershell
+  docker compose --profile photos stop
+  ```
+- Or remove everything, photos included:
+  ```powershell
+  docker compose --profile photos down -v
+  ```
+
+---
+
 ## What you just proved
 
-- [ ] All 307 automated tests pass on your machine
+- [ ] All automated tests pass on your machine (see the project log for the current count)
 - [ ] Flyway built the schema; the double-booking rule and CHECK constraints are in Postgres
 - [ ] The factory builds each type and enforces each type's rules (400s with the field)
 - [ ] Permissions: guests can't create; only the owner edits (403s)
@@ -2310,6 +2722,14 @@ Credentials go stale, get revoked, and run out of quota. Prove it doesn't matter
 - [ ] "How much have I spent?" is answered by SQL, exactly, with or without a key
 - [ ] A wrong key doesn't break anything: listings are still created and questions still answered, with warnings naming the failure
 - [ ] The backfill job logs one warning per listing instead of abandoning the batch
+- [ ] The same error in English, Hindi and Spanish, chosen by Accept-Language, by `?lang=`, and by the remembered cookie
+- [ ] Spring's own errors, bean validation and the AI's answers follow the language too
+- [ ] With no storage configured, a photo upload is a clear 503 and nothing else changes
+- [ ] With MinIO standing in for S3, a photo is stored under a random key and served back byte for byte
+- [ ] A renamed PDF, a PNG claiming to be a JPEG, a 6 MB file and a guest's upload are all refused, and nothing is stored
+- [ ] Removing a photo removes the row, then the file
+- [ ] GraphQL returns exactly the fields asked for, with money as an exact string, and translated errors
+- [ ] Every endpoint is in Swagger UI with an example, and the Postman collection runs top to bottom
 
 ---
 
@@ -2345,6 +2765,13 @@ Credentials go stale, get revoked, and run out of quota. Prove it doesn't matter
 | Part 51: `ai.mode ready=false` although you set the key | the variable was set in a different window, or after the app started | set it in Window 1, then start the app |
 | Part 51: `429 RESOURCE_EXHAUSTED` in the log | Gemini's free tier rate limit | it retries on the next job run; questions still answer without it |
 | Part 51: `vector_store` stays empty | the index job is off (`-`) or the key is rejected | check Window 1 for `ai.listing.embedFailed` |
+| Hindi shows as `????` or boxes | the console is not reading UTF-8, or its font has no Devanagari | `[Console]::OutputEncoding = [Text.Encoding]::UTF8`, and use Windows Terminal |
+| Part 56: `service "minio" is not running` or `No such container: rentalhub-minio` | MinIO only starts with its profile | `docker compose --profile photos up -d` |
+| Part 57: `503` with `image.storage.unavailable` | the bucket doesn't exist, or the credentials don't match MinIO's | redo Part 56, step 2; check the six variables were set in Window 1 *before* starting |
+| Part 57: `images.mode storage=NONE` although you set S3_BUCKET | the variables were set in another window, or after starting | set them in Window 1, then start the app |
+| Part 58: the 6 MB upload hangs or the connection resets | an old curl | `curl.exe --version` should be 8.x (Windows 11 ships it) |
+| Part 61: Postman's upload says the file can't be found | Postman's working directory isn't the repository | *Settings → General → Working directory*: `C:\dev\rentalhub` |
+entalhub` |
 
 **Tip:** to see a JSON response nicely indented, pipe it through PowerShell:
 `curl.exe -s http://localhost:8081/api/properties/1 | ConvertFrom-Json | ConvertTo-Json -Depth 5`

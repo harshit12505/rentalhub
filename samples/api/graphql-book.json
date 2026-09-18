@@ -1,0 +1,12 @@
+{
+  "query": "mutation Book($input: BookingInput!) { createBooking(input: $input) { id status nights totalAmount currency payment { status provider } } }",
+  "variables": {
+    "input": {
+      "propertyId": 1,
+      "checkIn": "2027-04-10",
+      "checkOut": "2027-04-12",
+      "guests": 2,
+      "paymentMethodId": "pm_card_visa"
+    }
+  }
+}

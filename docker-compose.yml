@@ -33,5 +33,29 @@ services:
       timeout: 5s
       retries: 10
 
+  # Optional, and never deployed: an S3-compatible store for trying photo uploads without an
+  # AWS account. Not started by `docker compose up -d`; start it with
+  #   docker compose --profile photos up -d
+  # (MinIO stopped publishing on Docker Hub; its community image lives on quay.io, pinned.)
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: rentalhub-minio
+    profiles: ["photos"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: rentalhub
+      MINIO_ROOT_PASSWORD: rentalhub-secret
+    ports:
+      - "9000:9000"   # the S3 API (S3_ENDPOINT=http://localhost:9000)
+      - "9001:9001"   # a web console for looking inside the bucket
+    volumes:
+      - rentalhub-photos:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   rentalhub-pgdata:
+  rentalhub-photos:

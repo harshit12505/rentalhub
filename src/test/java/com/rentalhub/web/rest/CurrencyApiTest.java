@@ -91,7 +91,7 @@ class CurrencyApiTest extends IntegrationTest {
         mvc.perform(get("/api/properties/{id}", id))
                 .andExpect(jsonPath("$.displayPrice").doesNotExist());
 
-        assertThat(redis.opsForValue().get("rentalhub:v2:propertyById::" + id))
+        assertThat(redis.opsForValue().get("rentalhub:v3:propertyById::" + id))
                 .contains("\"displayPrice\":null")
                 .doesNotContain("31.25");
         Cache localTier = ((TwoLevelCache) Objects.requireNonNull(cacheManager.getCache(CacheNames.PROPERTY_BY_ID))).localTier();
@@ -114,7 +114,7 @@ class CurrencyApiTest extends IntegrationTest {
                 .andExpect(jsonPath("$.content[?(@.title == 'Test studio')].displayPrice.amount").value(hasItem(40.0)))
                 .andExpect(jsonPath("$.exchangeRatesUnavailable").value(false));
         // The currency is part of the cache key: "40 dollars" and "40 rupees" are different searches.
-        assertThat(redis.hasKey("rentalhub:v2:propertySearch::city:|guests:|maxPrice:40|currency:USD|page:0|size:20"))
+        assertThat(redis.hasKey("rentalhub:v3:propertySearch::city:|guests:|maxPrice:40|currency:USD|page:0|size:20"))
                 .isTrue();
 
         // Without a currency, maxPrice is in rupees, and nothing is converted for display.

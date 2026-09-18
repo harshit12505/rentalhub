@@ -46,6 +46,18 @@ public interface PropertyRepository extends JpaRepository<Property, Long>, JpaSp
     @Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)
     Optional<Property> findForBookingById(Long id);
 
+    /**
+     * Loads a listing to add or remove a photo. The same forced version bump as a booking: two
+     * uploads to one listing at the same moment take turns, so they can neither both squeeze
+     * under the photo limit nor both take the same position.
+     *
+     * No entity graph here: Hibernate applies the lock mode to every entity the query loads, and
+     * the host and the photo rows have no version to bump. They are read lazily instead, inside
+     * the same transaction.
+     */
+    @Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)
+    Optional<Property> findForImageChangeById(Long id);
+
     List<Property> findByHostId(Long hostId);
 
     /**
@@ -76,6 +88,26 @@ public interface PropertyRepository extends JpaRepository<Property, Long>, JpaSp
      */
     @Query("SELECT DISTINCT p.city FROM Property p WHERE p.active = true ORDER BY p.city")
     List<String> findDistinctActiveCities();
+
+    /**
+     * The hosts of many listings, in one query: what GraphQL's {@code host} field on a page of
+     * search results is answered from, so twenty listings cost one query, not twenty. Plain
+     * values (a projection), so no entity and no lazy association is involved.
+     */
+    @Query("""
+            SELECT p.id AS propertyId, h.id AS hostId, h.fullName AS fullName
+            FROM Property p JOIN p.host h
+            WHERE p.id IN :propertyIds
+            """)
+    List<HostOfListing> findHostsOf(@Param("propertyIds") Collection<Long> propertyIds);
+
+    interface HostOfListing {
+        Long getPropertyId();
+
+        Long getHostId();
+
+        String getFullName();
+    }
 
     /**
      * Candidate listings for the AI phase's hybrid search: still on the market, matching the

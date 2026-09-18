@@ -33,7 +33,7 @@ public final class PropertyViews {
                 property.getAvailableUntil(),
                 new PropertyView.Host(property.getHost().getId(), property.getHost().getFullName()),
                 property.getImages().stream()
-                        .map(image -> new PropertyView.Image(image.getUrl(), image.getSortOrder()))
+                        .map(image -> new PropertyView.Image(image.getId(), image.getUrl(), image.getSortOrder()))
                         .toList(),
                 property.typeAttributes(),
                 property.getVersion(),

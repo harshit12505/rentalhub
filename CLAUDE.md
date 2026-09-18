@@ -85,7 +85,7 @@ server in tests. Its exceptions are checked (`StripeException`).
 - `open-in-view: false`. Services load everything a view needs.
 - Caches hold immutable DTO records, never managed entities (Caffeine hands the same
   instance to every caller). Changing a cached record's shape → bump
-  `rentalhub.cache.key-prefix` (now `rentalhub:v2:`; next change → `v3`).
+  `rentalhub.cache.key-prefix` (now `rentalhub:v3:`; next change → `v4`).
 - Payments (phase 5): a saga, never one transaction. `BookingAttempt` inserts the booking
   PENDING/UNPAID (dates held) → `PaymentService.collect`: create the payment (no money moves)
   → record its id (`BookingUpdates`, own transaction) → confirm → CONFIRMED/PAID, or
@@ -109,6 +109,30 @@ server in tests. Its exceptions are checked (`StripeException`).
   via the repository directly (tests may, to bypass the caches on purpose). The one
   exception is the version bump every booking makes (`OPTIMISTIC_FORCE_INCREMENT`):
   `BookingAttempt` publishes `ListingBookedEvent`, which evicts only that listing's entry.
+  Photos are the other listing write: they go through `ListingImageService`/`ListingImageUpdates`,
+  which publish the same `PropertyChangedEvent`.
+- Photos (phase 7): `storage/ImageStore` (S3 via the AWS SDK v2, or `UnconfiguredImageStore` when
+  `S3_BUCKET` is unset: uploads answer 503 `image.storage.notConfigured`). The file's first bytes
+  decide its type (`ImageFormat`); keys are `listings/<id>/<uuid>.<ext>`, never the uploaded
+  name. Upload = checks, then put the file (no transaction), then insert the row, deleting the
+  file if the insert fails; removal = row first, file after commit (`ListingImagesRemovedEvent`
+  to `ImageObjectCleaner`), also on listing delete. Photo changes load the listing with
+  `OPTIMISTIC_FORCE_INCREMENT` and NO entity graph (Hibernate locks every entity a query loads).
+  Photos are served by `ImageController` at `/images/listings/**` from a private bucket.
+- Languages (phase 7): en/hi/es only. `web/LanguageParameterFilter` applies `?lang=` to every
+  request (query string only on multipart, so uploads are not read early); `WebConfig`'s
+  cookie-remembering resolver must stay lazy. Spring's own errors resolve through
+  `problemDetail.<exception class>` keys; titles through `error.title.<status>`;
+  `ApiRoutingErrorHandler` covers 404/405 on `/api/` and `/images/` paths.
+  `MessagesFilesTest` enforces same keys/placeholders, real translations, and that every key
+  used in code exists.
+- GraphQL (phase 7): `resources/graphql/schema.graphqls`, controllers in `web/graphql/` call the
+  same services as REST. Money is the `Decimal` scalar (a string), never Float. List fields that
+  load related data use `@BatchMapping`. Errors go through `GraphQlErrorResolver` (same keys).
+  A schema field with no data fetcher fails startup (`GraphQlConfig`).
+- API docs (phase 7): every REST endpoint gets `@Operation` with a description and an example
+  (JSON in `web/rest/ApiExamples`), and a request in `postman/RentalHub.postman_collection.json`.
+  `OpenApiDocumentationTest` and `PostmanCollectionTest` fail the build otherwise.
 - Removal after a change uses the *immediate* cache methods (`evictIfPresent`, `invalidate`,
   the Redis writer's `invalidate`), never `evict`/`clear`, which may be deferred.
 - REST: the acting user is the `X-Demo-User-Id` header (`ApiHeaders.DEMO_USER_ID`) until
@@ -145,7 +169,9 @@ server in tests. Its exceptions are checked (`StripeException`).
   Database env vars: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`.
   Redis: `REDIS_URL` (default `redis://localhost:6379`). Payments: `STRIPE_SECRET_KEY`
   (test key; unset → simulated), `STRIPE_API_BASE` (stripe-mock only). Rates: `FX_RATES_URL`.
-  AI: `GEMINI_API_KEY` (unset → the AI is switched off entirely).
+  AI: `GEMINI_API_KEY` (unset → the AI is switched off entirely). Photos: `S3_BUCKET` (unset →
+  uploads off), `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `S3_ENDPOINT` +
+  `S3_PATH_STYLE` for an S3-compatible server (MinIO) only.
   Jobs: `STALE_LISTINGS_CRON`/`_ZONE`, `PAYMENT_RECONCILIATION_CRON`, `PAYMENT_STALE_AFTER`,
   `EMBEDDING_INDEX_CRON`.
   `spring.profiles.default: local`; Render sets `SPRING_PROFILES_ACTIVE=render`.
@@ -153,19 +179,24 @@ server in tests. Its exceptions are checked (`StripeException`).
 - Javadoc explains *why*, not what.
 - Tests: plain unit tests where possible. Anything touching SQL or Redis extends
   `support/IntegrationTest`: one shared context with Postgres (`pgvector/pgvector:pg16`)
-  and Redis containers, `@AutoConfigureMockMvc`; after each test it truncates tables and
-  invalidates caches. Never H2. Tests of after-commit behaviour, and API tests, must NOT be
+  and Redis containers, `@AutoConfigureMockMvc`, and no optional credentials (it doubles as
+  the proof that the app runs without them); after each test it truncates tables and
+  invalidates caches. Tests needing the optional services on extend
+  `support/ConnectedIntegrationTest` (fake AI models, MinIO for S3), a second shared context. Never H2. Tests of after-commit behaviour, and API tests, must NOT be
   `@Transactional` (a test-wide transaction hides lazy-loading bugs and never commits).
 
 ## Package layout (base `com.rentalhub`)
 ```
 config/        CacheConfig, ClockConfig, RetryConfig, SchedulingConfig, StripeConfig
-               (chooses the payment gateway), CurrencyConfig (rates client), WebConfig,
-               OpenApiConfig, S3Config, AiConfig (Envers is set in application.yml)
+               (chooses the payment gateway), CurrencyConfig (rates client), WebConfig
+               (language resolver), OpenApiConfig, S3Config (chooses the image store),
+               GraphQlConfig (scalars), AiConfig (Envers is set in application.yml)
 audit/         AuditActor (who is acting, per thread), Revision (revinfo), ActorRevisionListener
 payment/       PaymentGateway (+ StripePaymentGateway, SimulatedPaymentGateway), PaymentGateways,
                PaymentOutcome, PaymentRequest, PaymentGatewayException, PaymentSettings
 fx/            ExchangeRates, ExchangeRateSource (+ ExchangeRateApiSource), FxSettings
+storage/       ImageStore (+ S3ImageStore, UnconfiguredImageStore), ImageFormat (magic bytes),
+               ImageStorageSettings, ImageStoreException
 domain/model/  Property (abstract, SINGLE_TABLE) + Apartment/Villa/Cabin/Studio, User,
                Booking, Review, Favorite, PropertyImage; enums/ PropertyType,
                BookingStatus, PaymentStatus, PaymentProvider, Currency, UserRole
@@ -177,19 +208,24 @@ cache/         TwoLevelCache, PropertyCacheInvalidator, SearchCacheKeys(+KeyGene
 service/       PropertyService, SearchService, ListingHistoryService, BookingService
                (+ BookingAttempt, BookingUpdates, BookingRules, BookingSettings,
                OverlapConstraint), PaymentService, CurrencyService (+ PriceCeilings),
-               ReviewService, FavoriteService, ConstraintViolations, ImageStorageService,
+               ReviewService, FavoriteService, ListingImageService (+ ListingImageUpdates,
+               ImageObjectCleaner, ListingImagesRemovedEvent), ConstraintViolations,
                DemoUserService
 ai/            AiAvailability, AiSettings, AiEnvironmentPostProcessor (no key → AI off),
                EmbeddingIndexStore, ListingEmbeddingService, ListingIndexUpdater,
                ParsedQuery + QueryParser (rules), PreferenceProfile(+Service),
                HybridRetriever, RecommendationService, StatsService
-web/           RequestIdFilter (request id + user in the MDC, audit actor);
-               rest/, graphql/, mvc/ controllers
-dto/, exception/, scheduling/ (StaleListingJob, PaymentReconciliationJob,
-               EmbeddingIndexJob), bootstrap/ (DemoDataSeeder)
+web/           RequestIdFilter (request id + user in the MDC, audit actor),
+               LanguageParameterFilter (?lang=); rest/ (+ ApiExamples), graphql/ (controllers,
+               GraphQlScalars, DemoUserInterceptor, GraphQlErrorResolver), mvc/ controllers
+dto/, exception/ (GlobalExceptionHandler, ApiRoutingErrorHandler), scheduling/
+               (StaleListingJob, PaymentReconciliationJob, EmbeddingIndexJob), bootstrap/
+               (DemoDataSeeder)
 resources/     application.yml (+ -local, -render), db/migration/, messages*.properties,
                graphql/schema.graphqls, templates/, static/css/app.css
 docs/learning/ one teaching doc per phase
+postman/       the collection (every endpoint) and the local environment
+samples/api/   request bodies, sample photos and GraphQL documents for trying the API by hand
 ```
 
 ## Working method
@@ -220,13 +256,14 @@ One phase at a time, in order. Never scaffold a later phase early. After each ph
 | 4 | Auditing & scheduling: Envers, structured logs, @Scheduled job | done |
 | 5 | Payments: Stripe, BigDecimal math, multi-currency display | done |
 | 6 | AI / RAG: embeddings, preference profile, hybrid search, stats mode (+ favourites) | done |
-| 7 | Extra mile: S3, i18n, GraphQL, OpenAPI, Postman | — |
+| 7 | Extra mile: S3, i18n, GraphQL, OpenAPI, Postman | done |
 | 8 | Frontend: Thymeleaf pages | — |
 | 9 | Ship: seeder, Dockerfile, render.yaml, README, deploy guide | — |
 
 ## Commands
 ```powershell
 docker compose up -d                        # Postgres (pgvector) + Redis
+docker compose --profile photos up -d       # + MinIO, an S3 stand-in, for trying photo uploads
 .\mvnw.cmd test                             # needs Docker running
 .\mvnw.cmd spring-boot:run                  # local profile by default
 curl.exe http://localhost:8080/actuator/health
@@ -289,3 +326,9 @@ docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"   # cac
 - 2026-09-18 — The model is shown only the retrieved listings as `[id]`, and the answer is checked afterwards (invented ids removed, all-invented answers discarded) — a prompt is a request; a check is a rule.
 - 2026-09-18 — No key: `AiEnvironmentPostProcessor` switches chat, embeddings and the vector store off and excludes the Gemini embedding connection auto-config — the app must start without credentials.
 - 2026-09-18 — Tests fake only the two models (`support/FakeAiModels`); the vector store, pgvector and the SQL are real — no build depends on a key, quota or the network.
+- 2026-09-19 — No S3 settings → uploads are a clean 503; `S3_ENDPOINT`/`S3_PATH_STYLE` + MinIO (compose profile, tests) instead of a local-disk fallback — the spec says fail cleanly; Render's disk is wiped on every deploy.
+- 2026-09-19 — Photos served by the app from a private bucket, cacheable for a year; random keys; type from magic bytes; upload file then row (compensating delete), removal row then file after commit; 5 MB, 10 per listing — no public bucket to misconfigure; pre-signed links would expire inside cached listings; the worst leftover is an unused file.
+- 2026-09-19 — Language: `?lang=` via a servlet filter + cookie, then Accept-Language, then English; en/hi/es only; Spring's own errors translated via `problemDetail.*` keys; a test keeps the three files in step — works on 404/405 too; stateless; "real translations" enforced mechanically.
+- 2026-09-19 — GraphQL shares the REST services; money as a string `Decimal` scalar; `@BatchMapping` for hosts/photos; a `cancelBooking` mutation; custom CONFLICT/PAYMENT_FAILED/UNAVAILABLE classifications — Float is a double; N+1 proven away by a statement-count test.
+- 2026-09-19 — Tests fail when an endpoint lacks Swagger docs/examples or a Postman request — documentation that is not checked goes stale.
+- 2026-09-19 — Cache key prefix `rentalhub:v3:` — a listing's photos gained their id in the cached record.

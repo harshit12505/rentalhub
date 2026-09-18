@@ -1,0 +1,6 @@
+{
+  "query": "query Detail($id: ID!) { property(id: $id, currency: USD) { title typeLabel pricePerNight currency displayPrice { amount currency } attributes { label value valueLabel } reviews { rating } } }",
+  "variables": {
+    "id": 1
+  }
+}

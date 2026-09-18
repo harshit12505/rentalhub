@@ -39,7 +39,12 @@ import java.util.Objects;
 @SpringBootTest(properties = {
         "rentalhub.jobs.stale-listings.cron=-",
         "rentalhub.jobs.payment-reconciliation.cron=-",
-        "rentalhub.ai.index-job.cron=-"})
+        "rentalhub.ai.index-job.cron=-",
+        // Counts every SQL statement, so a test can prove how many queries something costs
+        // (GraphQlApiTest: a page of search results with hosts and photos). The per-session
+        // summary Hibernate would otherwise log after every request stays off.
+        "spring.jpa.properties.hibernate.generate_statistics=true",
+        "spring.jpa.properties.hibernate.session.events.log=false"})
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, FixedExchangeRates.class})
 public abstract class IntegrationTest {

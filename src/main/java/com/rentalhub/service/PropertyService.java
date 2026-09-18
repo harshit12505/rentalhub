@@ -2,6 +2,7 @@ package com.rentalhub.service;
 
 import com.rentalhub.cache.CacheNames;
 import com.rentalhub.domain.model.Property;
+import com.rentalhub.domain.model.PropertyImage;
 import com.rentalhub.domain.model.User;
 import com.rentalhub.domain.model.enums.UserRole;
 import com.rentalhub.domain.repository.BookingRepository;
@@ -18,6 +19,9 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Reading and changing listings.
@@ -147,9 +151,18 @@ public class PropertyService {
         if (bookings.existsByPropertyId(id)) {
             throw new ConflictException("property.delete.hasBookings");
         }
+        // Read before the delete: the rows go with the listing (ON DELETE CASCADE), and the
+        // files must follow them after the commit (ImageObjectCleaner).
+        List<String> photoKeys = property.getImages().stream()
+                .map(PropertyImage::getS3Key)
+                .filter(Objects::nonNull)
+                .toList();
         properties.delete(property);
 
         events.publishEvent(PropertyChangedEvent.deleted(property));
+        if (!photoKeys.isEmpty()) {
+            events.publishEvent(new ListingImagesRemovedEvent(photoKeys));
+        }
         log.atInfo().setMessage("listing.deleted")
                 .addKeyValue("propertyId", id)
                 .addKeyValue("hostId", actingUserId)

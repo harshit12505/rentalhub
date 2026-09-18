@@ -25,23 +25,24 @@ added at the end of every phase.
 | 3 | Bookings & concurrency | ✅ done | `6c20a81`, merged via PR #2 (`5305753`) |
 | 4 | Auditing, logging & scheduling (+ reviews) | ✅ done | `1fbd71a`, merged via PR #3 (`239a41f`) |
 | 5 | Payments & money (+ currencies) | ✅ done | `95a52da`, merged via PR #4 (`744ef1c`) |
-| 6 | AI / RAG (+ favourites) | ✅ done | `Phase 6: …` on branch `phase-6-ai` |
-| 7 | S3, i18n, GraphQL, OpenAPI, Postman | next — waiting for your go-ahead | |
-| 8 | Frontend (Thymeleaf) | | |
+| 6 | AI / RAG (+ favourites) | ✅ done | `2471607`, merged via PR #5 (`7141989`) |
+| 7 | S3 photos, i18n, GraphQL, OpenAPI, Postman | ✅ done | `Phase 7: …` on branch `phase-7-extras` |
+| 8 | Frontend (Thymeleaf) | next — waiting for your go-ahead | |
 | 9 | Ship: seeder, Docker, Render | | |
 
-**Numbers after Phase 6:** 307 automated tests (205 unit, 102 integration against real
-Postgres and Redis), all passing. Twenty REST endpoints: listings (with their history),
-bookings, reviews, favourites and recommendations.
-- **AI:** listings are indexed as vectors in Postgres (pgvector); a question in plain
-  English is answered by hybrid search — rules and SQL for the crisp parts, meaning for the
-  rest — and Gemini writes the answer from those listings only, with every id it names
-  checked afterwards. Questions about your own numbers are answered by SQL alone.
-- **It all works with no Gemini key**, with a plain answer saying which part was off.
-- **Carried over from Phase 5:** payments and refunds (Stripe or the simulator), and prices
-  in five currencies, which the recommendation budget filter reuses.
-- **Carried over from Phase 4:** every change is recorded with who made it, and every log
-  line carries its request id.
+**Numbers after Phase 7:** 356 automated tests (217 unit, 139 integration against real
+Postgres, Redis and MinIO), all passing. Twenty-three REST endpoints (listings with their
+history and photos, bookings, reviews, favourites, recommendations), plus a GraphQL API.
+- **Photos:** uploaded to S3 (or MinIO), checked by their bytes, served back by the app; a
+  clear 503 when no storage is configured.
+- **Three languages:** every message, including Spring's own errors, in English, Hindi and
+  Spanish, chosen by `?lang=`, a cookie or `Accept-Language`.
+- **GraphQL** at `/graphql` (try it at `/graphiql`), **Swagger UI** at `/swagger-ui.html`,
+  and a **Postman collection** in `postman/` — the last two held to "every endpoint" by tests.
+- **Carried over from Phase 6:** search by meaning, grounded AI answers and statistics, all
+  of which now also answer in Hindi and Spanish.
+- **Carried over from Phases 4–5:** payments and refunds, prices in five currencies, and an
+  audit trail with who changed what.
 
 Commit ids changed on 15 Sep 2026, when the history was rewritten (see the log). Older
 notes may still mention the previous ids.
@@ -50,29 +51,31 @@ notes may still mention the previous ids.
 
 ## 2. Your to-do list
 
-### Before Phase 7 (recommended)
+### Before Phase 8 (recommended)
 - [ ] Work through the **[hands-on guide](hands-on-guide.md)**.
-  - **Parts 46–52 are new** (about 25 minutes):
-    - save favourites, and see that saving twice leaves one;
-    - ask a question in plain English **with no AI key** and still get real listings;
-    - see the rules read a city, a party size and a budget out of a sentence;
-    - see the questions that SQL answers exactly ("how much have I spent?");
-    - set a deliberately **wrong** key and watch nothing break.
-  - Part 51 is the only part that needs a Gemini key.
-- [ ] **Gemini API key (optional, free, no card):** aistudio.google.com → "Create API key",
-      then `$env:GEMINI_API_KEY = "AIza..."` in the window you start the app from. With it,
-      Part 51 shows search by meaning and a written answer. Keep it out of the repo.
-- [ ] **GitHub:** Phase 6 is committed on `phase-6-ai`. Tell me when you want it pushed and
-      its pull request opened.
-- [ ] **AWS, for Phase 7:** an account with an S3 bucket and access keys. Signing up needs a
-      card, even on the free tier; if you would rather not, say so and Phase 7 will keep
-      images on local disk behind the same interface.
+  - **Parts 53–62 are new** (about 40 minutes):
+    - the same error in English, Hindi and Spanish, and the language remembered in a cookie;
+    - a photo upload with no storage (a clear 503), then with MinIO standing in for S3;
+    - what gets refused: a renamed PDF, a PNG claiming to be a JPEG, a 6 MB file;
+    - GraphQL from the command line and in GraphiQL;
+    - Swagger UI, and the whole Postman collection in one run.
+  - Two earlier parts print slightly differently now (Spring's error messages in Parts 9 and
+    21, and `rentalhub:v3:` cache keys); they were re-checked and updated.
+- [ ] **Postman (optional, free):** install the desktop app to use the collection in `postman/`.
+- [ ] **GitHub:** Phase 7 is committed on `phase-7-extras`. Tell me when you want it pushed
+      and its pull request opened.
+- [ ] **AWS (optional, for Phase 9's deploy):** photos work locally with MinIO. On Render they
+      need a real S3 bucket and an access key; signing up for AWS needs a card. Without it, the
+      deployed app simply refuses uploads with a clear message.
+- [ ] **Gemini API key (optional, free, no card):** still waiting from Phase 6, if you want to
+      see search by meaning (hands-on Part 51).
 
 ### Reading
-- [ ] [06 — AI: embeddings, RAG and search that understands](06-ai-rag.md), and answer its
-      interview questions out loud. "How do you stop it recommending listings that do not
-      exist?" is the one to get right.
-- [ ] The Phase 6 videos in [section 6](#6-youtube-study-plan--every-phase)
+- [ ] [07 — Photos on S3, three languages, GraphQL, OpenAPI and Postman](07-extras.md), and
+      answer its interview questions out loud. "The upload succeeded but the database insert
+      failed — what happens?" and "What is the N+1 problem?" are the ones to get right.
+- [ ] The Phase 7 videos in [section 6](#6-youtube-study-plan--every-phase)
+- [ ] If not done yet: [06 — AI](06-ai-rag.md) and the Phase 6 videos.
 - [ ] If not done yet: [05 — Payments, money and currencies](05-payments.md) and the Phase 5
       videos. "What if the server crashes after charging but before confirming the booking?"
 
@@ -83,6 +86,81 @@ notes may still mention the previous ids.
 ---
 
 ## 3. Log
+
+### Session 7 — Phase 7: photos, languages, GraphQL, OpenAPI, Postman (18–19 Sep 2026)
+
+**Before it:** PR #5 (Phase 6) merged into `main` as `7141989`, at your request.
+
+**Built**
+- **Listing photos on S3** (`storage/`, `service/ListingImageService`):
+  - JPEG, PNG or WebP only, recognised by the file's first bytes; a declared type that
+    contradicts them is refused;
+  - at most 5 MB (Spring's multipart limit and the service's own check, both translated) and
+    10 per listing;
+  - random keys (`listings/<id>/<uuid>.<ext>`), never the uploaded name;
+  - served back by the app at `/images/listings/…`, cacheable for a year; the bucket stays
+    private;
+  - upload order: checks, then the file, then the row, with the file deleted again if the row
+    fails; removal order: the row, then the file after the commit. Deleting a listing deletes
+    its files too. Two uploads to one listing take turns (the Phase 3 version lock);
+  - no `S3_BUCKET`: every upload is a 503 saying so, and nothing else changes. `S3_ENDPOINT` and
+    `S3_PATH_STYLE` let any S3-compatible server stand in, such as MinIO, which
+    `docker compose --profile photos up -d` now starts.
+- **Hindi and Spanish**, every key (`messages_hi.properties`, `messages_es.properties`):
+  - the language: `?lang=` (remembered in a cookie), then the cookie, then `Accept-Language`,
+    then English; only the three are ever chosen;
+  - Spring's own errors are translated too (`problemDetail.*` keys), with translated titles, and
+    the 404/405 that happen before any controller is reached now get the same problem-detail
+    shape (`ApiRoutingErrorHandler`); anything unexpected is a translated 500 with the request
+    id, never a stack trace.
+- **GraphQL** (`resources/graphql/schema.graphqls`, `web/graphql/`): search and detail queries,
+  `createBooking`, `cancelBooking` and `createReview`; `Decimal`, `Date` and `DateTime` scalars
+  (money as a string); `@BatchMapping` for hosts and photos; translated errors with
+  classifications; GraphiQL at `/graphiql`.
+- **OpenAPI** (springdoc 3.1.1): `@Tag`, `@Operation` and example payloads on all 23 endpoints,
+  Swagger UI at `/swagger-ui.html`.
+- **Postman**: `postman/RentalHub.postman_collection.json` (33 requests: every REST endpoint plus
+  GraphQL, in an order that runs top to bottom on a fresh database) and
+  `RentalHub.local.postman_environment.json` (`baseUrl`, `hostId`, `guestId`).
+- **Cache key prefix `v3`**: a listing's photos gained their id in the cached record.
+- **Tests:** 49 more, 356 in all (217 unit, 139 integration).
+  - Unit: `ImageFormatTest`, `ListingImageServiceTest`, `MessagesFilesTest`.
+  - Integration: `ListingImageApiTest` (against MinIO in Docker), `ImagesSwitchedOffTest`,
+    `LanguageApiTest`, `FrameworkErrorsApiTest`, `GraphQlApiTest` (including the SQL-statement
+    count), `OpenApiDocumentationTest`, `PostmanCollectionTest`.
+  - A second shared test context, `ConnectedIntegrationTest`, has every optional service
+    switched on without any account: fake AI models and MinIO. `AiRecommendationTest` moved into
+    it.
+- **Docs:** [07 — Photos on S3, three languages, GraphQL, OpenAPI and Postman](07-extras.md);
+  hands-on guide Parts 53–62 and updates to Parts 9, 21 and the cache-key parts; photo and
+  GraphQL samples; README, CLAUDE.md, the samples README and 00.
+
+**Judgement calls (explained before coding):** D69–D78 below. The notable ones:
+- no S3 means a clean 503, as the spec says, not the local-disk fallback I had floated after
+  Phase 6 (Render wipes its disk on every deploy); MinIO covers trying it locally;
+- photos served through the app rather than from a public bucket or with pre-signed links;
+- a 10-photo limit per listing (the spec only asks for a size cap);
+- `?lang=` remembered in a cookie, not the session;
+- a `cancelBooking` mutation beside the two the spec names;
+- tests that fail the build when an endpoint is missing from Swagger or Postman.
+
+**Verified by hand** on 18–19 Sep 2026, against throwaway containers (Postgres, Redis and MinIO
+on other ports), never the project's own:
+- with no storage: the startup line and the 503 in English and Hindi;
+- the language rules: Accept-Language, `?lang=` and its cookie, French falling back, Spring's
+  own errors, bean validation and the AI statistics in Spanish;
+- with MinIO: upload, the listing showing it, the bytes served back identical, the refusals
+  (renamed PDF, PNG claiming to be JPEG, a 6 MB file answered 413 by a real Tomcat, a guest),
+  a WebP accepted as `application/octet-stream`, removal, and deleting a listing deleting its
+  file;
+- GraphQL (Hindi and Spanish), GraphiQL, Swagger UI and the 23 documented operations;
+- the Parts 53–61 commands run once more in PowerShell itself, which is where the
+  `[Console]::OutputEncoding` line for Hindi came from;
+- the Postman collection, replayed top to bottom by a small script that applies its requests
+  and checks in order: 33 of 33. **Not tried in the Postman app itself**, so its
+  working-directory setting for the upload is from Postman's documentation, not seen.
+
+**Result:** 356/356 tests passing.
 
 ### Session 6 — Phase 6: AI, embeddings and RAG (18 Sep 2026)
 
@@ -566,6 +644,16 @@ Why each non-obvious choice was made. Interviewers love "why".
 | D66 | The tests fake only the two models; the vector store, pgvector, the SQL and the checks are real | a real key would make the build need a secret, cost quota and vary between runs |
 | D67 | Ranking = similarity plus small profile boosts (0.05 city, 0.05 price band, 0.03 capacity), 50 candidates narrowed to 5 | the question in front of us beats habit, and a boost must never lift a listing that means nothing like it above one that does |
 | D68 | A suggestion carries its `similarity`, and `displayPrice` only when `?currency=` was asked for | anyone reviewing the project can see why a listing was suggested; a converted price at a rate of 1 says nothing |
+| D69 | No S3 settings: uploads are a clear 503 (no Retry-After); `S3_ENDPOINT`/`S3_PATH_STYLE` let MinIO stand in, started by a compose profile and used by the tests | the spec's "fail cleanly"; a local-disk fallback would lose photos on every Render deploy; MinIO tests the real S3 protocol with no account |
+| D70 | Photos served by the app at `/images/listings/…` (private bucket), cacheable for a year | no public bucket to get wrong; works with any S3-compatible store; pre-signed links would expire inside cached listings |
+| D71 | The file's first bytes decide its type; a contradicting declared type is refused; key and content type come from the bytes; random keys, never the uploaded name | a name and a header are claims; a signature is evidence; a client's text has no place in a storage path |
+| D72 | Upload = checks, file, row (file deleted if the row fails); removal = row, then file after commit; listing delete removes its files | the payment saga's shape: the worst leftover is an unused file, never a listing pointing at a missing photo |
+| D73 | 5 MB per photo, 10 per listing, the version lock of Phase 3 on photo changes | the spec asks for a size cap; a count cap keeps a listing and its cached view bounded; concurrent uploads can't both pass the limit |
+| D74 | Language: `?lang=` (a filter, remembered in a cookie), then cookie, then Accept-Language, then English; only en/hi/es | works on every request including 404/405; stateless; a French locale with English text would still format numbers the French way |
+| D75 | Spring's own errors translated through `problemDetail.*` keys, titles from `error.title.<status>`, a catch-all 500 with the request id | the spec says every error message; a client should never see English next to Hindi, or a stack trace |
+| D76 | A test holds the three message files to the same keys and placeholders, Devanagari in Hindi, no English left in Spanish (three words excepted), and every key used in code present | "real translations" can't be judged by a test, but every mechanical failure can be caught |
+| D77 | GraphQL: money as a `Decimal` string scalar, a `cancelBooking` mutation, custom CONFLICT/PAYMENT_FAILED/UNAVAILABLE classifications, a startup failure if a schema field has no fetcher | Float is a double; cancelling is the natural pair of booking; REST's 409/402/503 need a GraphQL equivalent; a missing fetcher should fail loudly |
+| D78 | Tests fail when an endpoint lacks Swagger docs and examples, or a Postman request | documentation that isn't checked goes stale |
 
 ---
 
@@ -610,6 +698,14 @@ Each of these is a good "tell me about a problem you solved" story.
 | 6.6 | In the AI integration test, only one of two listings ever came back from the vector store | the fake embedding model gave texts with no shared words vectors at exactly right angles, and a vector store drops similarity 0 | the fake adds a small constant direction to every vector, which is how real embeddings behave — two English sentences are never orthogonal |
 | 6.7 | "What do I usually pay for my favourites?" was answered with listings instead of a number | the intent rules had no word for "usually" or "pay", and "rating" was not a subject | both lists widened, with tests for each phrasing. Found by hand while writing the guide |
 | 6.8 | Every answer carried a `displayPrice` equal to the real price at a rate of 1 | the recommendation endpoint converted into the default currency even when none was asked for | it converts only when `?currency=` is given, as everywhere else since Phase 5 |
+| 7.1 | The locked query for a photo change failed: "Entity User has no version and may not be locked at level OPTIMISTIC_FORCE_INCREMENT" | Hibernate applies a query's lock mode to every entity it loads, and the query also fetched the host and the photos | the locked query loads only the listing; host and photos are read lazily in the same transaction |
+| 7.2 | `?lang=es` changed the error's text but not bean validation or the AI's answers | my resolver worked out the language once, when the request arrived, before `?lang=` had been read; Spring's own resolver is lazy for exactly this reason | the resolver's answer is computed when it is asked for. Lesson: a value a later step may change must be read late |
+| 7.3 | `?lang=` was ignored on a 405 (found by hand) | Spring's LocaleChangeInterceptor only runs once a controller is chosen, and a routing error never gets that far | a servlet filter applies `?lang=` to every request; on an upload it reads only the query string, so Tomcat doesn't read the body early |
+| 7.4 | Spring's own errors kept an English title ("Bad Request") next to a translated detail | the title was set before Spring built the body for most of its errors | set at the last step, `createResponseEntity`, where the body is final |
+| 7.5 | A 405 or an unknown `/api/…` path came back in Spring Boot's own English JSON | those errors happen before a controller is chosen, and the error handler only covers REST controllers | `ApiRoutingErrorHandler`, ordered last, for `/api/` and `/images/` paths only, so the pages of Phase 8 still get normal error pages |
+| 7.6 | MinIO's image could not be pulled: "repository does not exist" | MinIO stopped publishing on Docker Hub in 2025 | the pinned community release from quay.io, in the tests and in docker-compose.yml |
+| 7.7 | The GraphQL tests failed: "asyncDispatch CountDownLatch was not set" | Spring for GraphQL answered these requests synchronously, so there was nothing to wait for | the test helper handles both a synchronous and an asynchronous answer |
+| 7.8 | Hindi printed as `????` in the tests' failure messages and in a plain PowerShell window | the console's code page is not UTF-8 (the data itself was right) | the guide sets `[Console]::OutputEncoding` to UTF-8 and suggests Windows Terminal |
 | 5.19 | The history rewrite was undone right after it ran | the recovery command (`git reset --hard refs/original/…`), meant only for when a check failed, was listed with a Run button among the steps and got run | `git reflog` still listed the rewritten `main` (`5305753`), so `git reset --hard 5305753` and a force-push restored it. Lesson: Git rarely loses a commit, because the reflog records every position a branch has had |
 
 ---
@@ -746,11 +842,13 @@ ByteByteGo (system-design concepts) · Fireship (quick overviews) · TechWorld w
 ### Phase 7 — S3, i18n, GraphQL, OpenAPI, Postman
 - [ ] [aws s3 tutorial for beginners](https://www.youtube.com/results?search_query=aws+s3+tutorial+for+beginners) — buckets, objects, keys
 - [ ] [aws iam access keys](https://www.youtube.com/results?search_query=aws+iam+user+access+keys+tutorial) — least-privilege credentials
+- [ ] [minio tutorial](https://www.youtube.com/results?search_query=minio+tutorial+docker) — an S3-compatible server on your own machine, as used in the tests and the guide
 - [ ] [spring boot file upload](https://www.youtube.com/results?search_query=spring+boot+file+upload+multipart) — multipart uploads, size limits
 - [ ] [file type magic numbers](https://www.youtube.com/results?search_query=file+signature+magic+numbers) — why we check file bytes, not just the name
 - [ ] [spring boot i18n locale resolver](https://www.youtube.com/results?search_query=spring+boot+i18n+locale+resolver) — `Accept-Language` and `?lang=`
 - [ ] [graphql vs rest](https://www.youtube.com/results?search_query=graphql+vs+rest) — when each fits
 - [ ] [spring graphql tutorial](https://www.youtube.com/results?search_query=spring+for+graphql+tutorial) — `@QueryMapping`, `@MutationMapping`
+- [ ] [N+1 query problem explained](https://www.youtube.com/results?search_query=n%2B1+query+problem+explained) — why one query per item hurts
 - [ ] [graphql N+1 batch mapping](https://www.youtube.com/results?search_query=spring+graphql+batchmapping+N%2B1) — `@BatchMapping`
 - [ ] [springdoc openapi swagger](https://www.youtube.com/results?search_query=springdoc+openapi+swagger+spring+boot) — `/swagger-ui.html`
 - [ ] [postman tutorial](https://www.youtube.com/results?search_query=postman+tutorial+for+beginners) — collections and environments
@@ -786,7 +884,7 @@ None are needed yet, and each is optional because the app works without it.
 |---|---|---|---|
 | 5 | Stripe (test mode keys). Optional: invite-only in India, and the simulator covers every path | stripe.com | free |
 | 6 | Gemini API key. Optional: the app boots, indexes nothing and still answers questions from ordinary search without it | aistudio.google.com | free tier, no card |
-| 7 | AWS (S3 bucket + access keys) | aws.amazon.com | free tier, but signup needs a card |
+| 7 | AWS (S3 bucket + access keys). Optional: MinIO in Docker covers everything locally; only a deployed app needs real S3 for photos | aws.amazon.com | free tier, but signup needs a card |
 | 9 | GitHub (for Render to deploy from) | github.com | free — ✅ already set up |
 | 9 | Render | render.com (sign in with GitHub) | free tier |
 

@@ -121,3 +121,37 @@ the recommendations endpoint is for. Some questions to try with them:
 
 With no `GEMINI_API_KEY` the answer comes back with `"aiUsed": false` and a sentence saying
 search by meaning is off. Nothing else changes.
+
+## Photos (Phase 7)
+
+Uploads are `multipart/form-data` with the photo in a part called `file`. They need image
+storage (S3, or MinIO from `docker compose --profile photos up -d`); without it every upload
+is a 503 that says so.
+
+```powershell
+curl.exe -s -i -X POST http://localhost:8081/api/properties/1/images -H "X-Demo-User-Id: 1" -F "file=@samples/api/photo.jpg"
+```
+
+| File | What it is | Expected when uploaded by the host |
+|---|---|---|
+| `photo.jpg` | a small JPEG (a beach at sunset, drawn for these samples) | 201 |
+| `photo.png` | the same picture as a PNG | 201; 400 `image.type.mismatch` if sent with `;type=image/jpeg` |
+| `photo.webp` | the same picture as a WebP | 201, although curl declares it `application/octet-stream` |
+| `not-a-photo.jpg` | a PDF renamed to `.jpg` | 400 `image.type.unsupported` |
+
+## GraphQL (Phase 7)
+
+`POST /graphql` with one of these as the body; add `-H "X-Demo-User-Id: 2"` for the mutations.
+
+```powershell
+curl.exe -s -X POST http://localhost:8081/graphql -H "Content-Type: application/json" --data "@samples/api/graphql-search.json"
+```
+
+| File | What it asks |
+|---|---|
+| `graphql-search.json` | listings in Goa, with each one's host and photos (batch-loaded) |
+| `graphql-detail.json` | listing 1 in full, with its price in USD and its attributes |
+| `graphql-book.json` | book listing 1 for two nights in April 2027, paid with `pm_card_visa` |
+| `graphql-review.json` | review listing 1: a FORBIDDEN error until a stay there has ended |
+
+The same queries, and every REST endpoint, are also in the Postman collection in `postman/`.

@@ -6,25 +6,16 @@ import com.rentalhub.dto.PropertyRequest;
 import com.rentalhub.scheduling.EmbeddingIndexJob;
 import com.rentalhub.service.FavoriteService;
 import com.rentalhub.service.PropertyService;
+import com.rentalhub.support.ConnectedIntegrationTest;
 import com.rentalhub.support.FakeAiModels;
-import com.rentalhub.support.FixedExchangeRates;
 import com.rentalhub.support.TestMessages;
 import com.rentalhub.support.TestRequests;
-import com.rentalhub.support.TestcontainersConfiguration;
 import com.rentalhub.web.rest.ApiHeaders;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.cache.CacheManager;
-import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
@@ -35,31 +26,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * The AI features with the models faked and everything else real.
  *
- * Its own application context, because this one has an embedding model and a chat model where
- * the rest of the suite deliberately has none. Everything under them is the real thing: the
- * real PgVectorStore, the real pgvector container, real SQL filters and the real grounding
- * check. What is faked (see support/FakeAiModels) is only the part that would otherwise need
+ * In the connected context (see ConnectedIntegrationTest), because it needs an embedding model
+ * and a chat model where the default context deliberately has none. Everything under them is
+ * the real thing: the real PgVectorStore, the real pgvector container, real SQL filters and the
+ * real grounding check. What is faked (see support/FakeAiModels) is only the part that would otherwise need
  * a key, a network and quota.
  */
-@SpringBootTest(properties = {
-        "rentalhub.jobs.stale-listings.cron=-",
-        "rentalhub.jobs.payment-reconciliation.cron=-",
-        "rentalhub.ai.index-job.cron=-",
-        // The models come from FakeAiModels; the vector store is the real one, switched back
-        // on over the "no key, no AI" default (see AiEnvironmentPostProcessor).
-        "spring.ai.vectorstore.type=pgvector"})
-@AutoConfigureMockMvc
-@Import({TestcontainersConfiguration.class, FixedExchangeRates.class, FakeAiModels.class})
-class AiRecommendationTest {
+class AiRecommendationTest extends ConnectedIntegrationTest {
 
     @Autowired
     private MockMvc mvc;
-
-    @Autowired
-    private JdbcTemplate jdbc;
-
-    @Autowired
-    private CacheManager cacheManager;
 
     @Autowired
     private UserRepository users;
@@ -90,14 +66,6 @@ class AiRecommendationTest {
         chatModel.behave();
         hostId = users.save(TestRequests.host()).getId();
         guestId = users.save(TestRequests.guest()).getId();
-    }
-
-    @AfterEach
-    void emptyEverything() {
-        jdbc.execute("TRUNCATE TABLE bookings, favorites, reviews, property_images, properties, users, "
-                + "properties_aud, bookings_aud, reviews_aud, revinfo, "
-                + "vector_store, listing_embeddings RESTART IDENTITY CASCADE");
-        cacheManager.getCacheNames().forEach(name -> Objects.requireNonNull(cacheManager.getCache(name)).invalidate());
     }
 
     @Test

@@ -1,0 +1,194 @@
+# RentalHub's GraphQL API: the same listings, bookings and reviews as the REST API, for a client
+# that wants to ask for exactly the fields it needs, in one round trip.
+#
+# The acting user is the same X-Demo-User-Id header as for REST. The language of every message,
+# label and error follows ?lang= / the language cookie / Accept-Language, as for REST.
+
+"An exact decimal, such as an amount of money, sent as a string (\"12000.00\") so that no client ever reads it into a floating-point number."
+scalar Decimal
+
+"A calendar date in ISO-8601 form: \"2027-03-10\"."
+scalar Date
+
+"An instant in ISO-8601 form, in UTC: \"2026-09-18T09:31:25Z\"."
+scalar DateTime
+
+type Query {
+    "One listing, with everything its detail page shows. Null if there is no such listing."
+    property(id: ID!, currency: Currency): Listing
+
+    "One page of active listings matching the filter, newest first."
+    searchProperties(filter: SearchFilter, page: Int = 0, size: Int = 20): ListingPage!
+}
+
+type Mutation {
+    "Books and pays for a stay, as the acting user. The booking comes back PENDING if the payment's outcome is not known yet."
+    createBooking(input: BookingInput!): Booking!
+
+    "Cancels a booking, as its guest or the listing's host. A paid booking is refunded in full."
+    cancelBooking(id: ID!): Booking!
+
+    "Reviews a listing, as a guest whose stay there has ended. One review per guest per listing."
+    createReview(propertyId: ID!, input: ReviewInput!): Review!
+}
+
+input SearchFilter {
+    city: String
+    "At least this many guests."
+    guests: Int
+    "At most this much per night, in `currency` (INR if not given). Listings priced in other currencies are compared at today's rate."
+    maxPrice: Decimal
+    "The currency to read maxPrice in and to show prices in."
+    currency: Currency
+}
+
+input BookingInput {
+    propertyId: ID!
+    checkIn: Date!
+    checkOut: Date!
+    guests: Int!
+    "A Stripe test payment-method id, such as pm_card_visa."
+    paymentMethodId: String!
+}
+
+input ReviewInput {
+    "A whole number from 1 to 5."
+    rating: Int!
+    comment: String
+}
+
+enum Currency { INR USD EUR GBP AED }
+enum PropertyType { APARTMENT VILLA CABIN STUDIO }
+enum BookingStatus { PENDING CONFIRMED CANCELLED COMPLETED }
+enum PaymentStatus { NONE UNPAID PAID FAILED REFUNDED }
+enum PaymentProvider { STRIPE SIMULATED }
+
+type ListingPage {
+    content: [ListingCard!]!
+    page: Int!
+    size: Int!
+    totalElements: Int!
+    totalPages: Int!
+    "True when a price limit could only be compared with some currencies, because a rate was missing."
+    exchangeRatesUnavailable: Boolean!
+}
+
+"A listing as a search result shows it."
+type ListingCard {
+    id: ID!
+    type: PropertyType!
+    "The type's name in the caller's language."
+    typeLabel: String!
+    title: String!
+    city: String!
+    country: String!
+    pricePerNight: Decimal!
+    currency: Currency!
+    "The price in the currency asked for, when one was."
+    displayPrice: Money
+    maxGuests: Int!
+    bedrooms: Int!
+    bathrooms: Int!
+    coverImageUrl: String
+    "Loaded for every card on the page in one query, however many there are."
+    host: Host!
+    "Loaded for every card on the page in one query, however many there are."
+    images: [Image!]!
+}
+
+"A listing as its detail page shows it."
+type Listing {
+    id: ID!
+    type: PropertyType!
+    typeLabel: String!
+    title: String!
+    description: String!
+    city: String!
+    country: String!
+    address: String
+    pricePerNight: Decimal!
+    currency: Currency!
+    displayPrice: Money
+    maxGuests: Int!
+    bedrooms: Int!
+    bathrooms: Int!
+    active: Boolean!
+    availableUntil: Date
+    host: Host!
+    images: [Image!]!
+    "The fields only this type of property has, with labels in the caller's language."
+    attributes: [Attribute!]!
+    reviews: [Review!]!
+    version: Int!
+    updatedAt: DateTime!
+}
+
+type Attribute {
+    name: String!
+    label: String!
+    "Null when the host did not say."
+    value: String
+    "The value in words, in the caller's language, where it has words (Yes/No, a heating type)."
+    valueLabel: String
+}
+
+type Money {
+    amount: Decimal!
+    currency: Currency!
+    rate: Decimal!
+    ratesAsOf: DateTime
+}
+
+type Host {
+    id: ID!
+    fullName: String!
+}
+
+type Image {
+    id: ID!
+    url: String!
+    sortOrder: Int!
+}
+
+type Booking {
+    id: ID!
+    property: BookedListing!
+    guest: Person!
+    checkIn: Date!
+    checkOut: Date!
+    nights: Int!
+    guests: Int!
+    totalAmount: Decimal!
+    currency: Currency!
+    displayTotal: Money
+    status: BookingStatus!
+    payment: Payment!
+    createdAt: DateTime!
+}
+
+type BookedListing {
+    id: ID!
+    title: String!
+    city: String!
+}
+
+type Person {
+    id: ID!
+    fullName: String!
+}
+
+type Payment {
+    status: PaymentStatus!
+    provider: PaymentProvider
+    reference: String
+    refundReference: String
+}
+
+type Review {
+    id: ID!
+    propertyId: ID!
+    author: Person!
+    rating: Int!
+    comment: String
+    createdAt: DateTime!
+}
