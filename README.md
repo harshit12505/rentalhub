@@ -23,10 +23,12 @@ One deployable Spring Boot application. No separate frontend build, no npm, no s
 | 4 | Auditing (Envers) with listing history, structured logging, nightly stale-listing job, reviews | ✅ |
 | 5 | Payments (Stripe test mode, or a built-in simulator), refunds, BigDecimal money maths, prices in other currencies | ✅ |
 | 6 | AI: listings indexed as vectors (pgvector), hybrid search, a preference profile, grounded answers from Gemini, favourites | ✅ |
-| 7–9 | Extras (S3, i18n, GraphQL, OpenAPI), frontend, deploy | not started |
+| 7 | Listing photos on S3, English/Hindi/Spanish, GraphQL, OpenAPI (Swagger UI), Postman collection | ✅ |
+| 8–9 | Frontend, deploy | not started |
 
-The app has a REST API for listings, bookings (with payments), reviews, favourites and
-recommendations (see [Trying the API](#trying-the-api-powershell)) and no web pages yet. The startup warning `Cannot find template location: classpath:/templates/` is
+The app has a REST API for listings (with photos), bookings (with payments), reviews,
+favourites and recommendations (see [Trying the API](#trying-the-api-powershell)), a GraphQL
+API, and no web pages yet. The startup warning `Cannot find template location: classpath:/templates/` is
 expected until pages arrive in phase 8.
 
 ---
@@ -93,6 +95,9 @@ docker compose up -d
 | A booking is refused with `paymentMethodId`: "This field is required." | Since Phase 5 a booking says how it's paid | Add `"paymentMethodId": "pm_card_visa"` to the body |
 | `"displayPrice": null` everywhere, or `"exchangeRatesUnavailable": true` | The exchange-rate API couldn't be reached (offline?) | The app tries again every minute; same-currency prices still work |
 | `ai.mode ready=false` at startup, and `"aiUsed": false` in answers | No `GEMINI_API_KEY` — the expected state without one | Everything else works. Set the key in the window you start the app from to switch the AI on |
+| Hindi shows as `????` or boxes in PowerShell | The console isn't reading UTF-8, or its font lacks Devanagari | `[Console]::OutputEncoding = [Text.Encoding]::UTF8`, and use Windows Terminal |
+| A photo upload answers 503 `image.storage.notConfigured` | No `S3_BUCKET` set: uploads are switched off | Set the S3 variables, or use MinIO (`docker compose --profile photos up -d`) |
+| A photo upload answers 503 `image.storage.unavailable` | The bucket is missing, or the credentials are wrong | Check the bucket exists and the keys match; the log line `image.upload.failed` has the reason |
 | `ai.listing.embedFailed` or `ai.search.failed` in the log | The key is wrong, revoked, or the free tier's rate limit was hit | Listings and answers keep working; the index job retries every two minutes |
 
 ---
@@ -126,6 +131,24 @@ docker compose up -d
 | `DELETE` | `/api/properties/{id}/favorite` | any user | Unsave it. Removing one that is not saved is not an error |
 | `GET` | `/api/favorites?currency=` | any user | Your saved listings, newest first |
 | `GET` | `/api/recommendations?q=&currency=` | any user | Ask in plain English. Always 200, with or without AI |
+| `POST` | `/api/properties/{id}/images` | that listing's host | Upload a photo (`multipart/form-data`, part `file`): JPEG, PNG or WebP, at most 5 MB, 10 per listing. 503 when no storage is configured |
+| `DELETE` | `/api/properties/{id}/images/{imageId}` | that listing's host | Remove a photo (the file is deleted from storage after the commit) |
+| `GET` | `/images/listings/{id}/{file}` | anyone | A photo's bytes, served by the app from a private bucket |
+
+**Explore it in the browser:** every endpoint, with examples, at
+[`/swagger-ui.html`](http://localhost:8081/swagger-ui.html); GraphQL at `POST /graphql`, with
+a query editor at [`/graphiql`](http://localhost:8081/graphiql). A Postman collection covering
+everything is in [`postman/`](postman/): import both files and choose the "RentalHub local"
+environment.
+
+**Languages.** Every message comes in English, Hindi or Spanish: `?lang=hi` on any request
+(remembered in a cookie), otherwise the `Accept-Language` header, otherwise English.
+
+**Photos** need an S3 bucket (`S3_BUCKET`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`). Without one, uploads are answered with a clear 503 and nothing else
+changes. To try them without AWS, run MinIO, an S3-compatible server:
+`docker compose --profile photos up -d` (the
+[hands-on guide](docs/learning/hands-on-guide.md), Part 56, has the three extra steps).
 
 Every response carries an `X-Request-Id` header. The same id appears on every log line
 written while handling that request, so a problem report can be matched to the logs.

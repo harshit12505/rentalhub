@@ -1,0 +1,1403 @@
+{
+  "info": {
+    "name": "RentalHub",
+    "description": "Every RentalHub endpoint, REST and GraphQL, in an order that works from top to bottom on a fresh database: run the folders in order, and ids created by one request are saved for the next.\n\nImport this file and postman/RentalHub.local.postman_environment.json, choose the \"RentalHub local\" environment, and set hostId and guestId to a HOST and a GUEST user (the hands-on guide creates them as 1 and 2).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Listings",
+      "item": [
+        {
+          "name": "Search listings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties?city=goa&guests=2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties"
+              ],
+              "query": [
+                {
+                  "key": "city",
+                  "value": "goa"
+                },
+                {
+                  "key": "guests",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Active listings, newest first. Every filter is optional."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search under $100 a night, prices in USD",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties?maxPrice=100&currency=USD",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties"
+              ],
+              "query": [
+                {
+                  "key": "maxPrice",
+                  "value": "100"
+                },
+                {
+                  "key": "currency",
+                  "value": "USD"
+                }
+              ]
+            },
+            "description": "maxPrice is read in currency and compared with each listing in its own currency."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create a listing (host)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{hostId}}",
+                "description": "Who is acting."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties"
+              ]
+            },
+            "description": "As the host. Saves the new listing's id as {{propertyId}} for the requests after it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"VILLA\",\n  \"title\": \"Quiet garden villa\",\n  \"description\": \"A calm hideaway with a shaded garden, hammocks and birdsong. No traffic, no crowds; the beach is a ten minute walk down a lane.\",\n  \"city\": \"Goa\",\n  \"country\": \"India\",\n  \"pricePerNight\": 9000,\n  \"currency\": \"INR\",\n  \"maxGuests\": 6,\n  \"bedrooms\": 3,\n  \"bathrooms\": 2,\n  \"attributes\": { \"plotAreaSqm\": \"500\", \"hasPool\": \"true\" }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('propertyId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "One listing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/{{propertyId}}?currency=USD",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}"
+              ],
+              "query": [
+                {
+                  "key": "currency",
+                  "value": "USD"
+                }
+              ]
+            },
+            "description": "Add ?currency=USD to also see the price converted."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replace a listing (host)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{hostId}}",
+                "description": "Who is acting."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/{{propertyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}"
+              ]
+            },
+            "description": "Full replacement: the body is the listing's complete new state.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"VILLA\",\n  \"title\": \"Quiet garden villa, renamed\",\n  \"description\": \"A calm hideaway with a shaded garden, hammocks and birdsong. No traffic, no crowds; the beach is a ten minute walk down a lane.\",\n  \"city\": \"Goa\",\n  \"country\": \"India\",\n  \"pricePerNight\": 9000,\n  \"currency\": \"INR\",\n  \"maxGuests\": 6,\n  \"bedrooms\": 3,\n  \"bathrooms\": 2,\n  \"attributes\": { \"plotAreaSqm\": \"500\", \"hasPool\": \"true\" }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A listing's history (host)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{hostId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/{{propertyId}}/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "history"
+              ]
+            },
+            "description": "Every recorded change, with who made it and which fields changed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create a studio to delete (host)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{hostId}}",
+                "description": "Who is acting."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties"
+              ]
+            },
+            "description": "A listing with no bookings, so the next request can delete it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"STUDIO\",\n  \"title\": \"Compact city studio\",\n  \"description\": \"One room with a kitchenette, close to the metro.\",\n  \"city\": \"Bengaluru\",\n  \"country\": \"India\",\n  \"pricePerNight\": 1800,\n  \"currency\": \"INR\",\n  \"maxGuests\": 2,\n  \"bedrooms\": 0,\n  \"bathrooms\": 1,\n  \"attributes\": { \"areaSqm\": \"28\", \"hasSofaBed\": \"true\" }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('throwawayId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete a listing (host)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{hostId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/{{throwawayId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{throwawayId}}"
+              ]
+            },
+            "description": "Only a listing with no bookings can be deleted (409 otherwise)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A missing listing, in Hindi (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/999999?lang=hi",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "999999"
+              ],
+              "query": [
+                {
+                  "key": "lang",
+                  "value": "hi"
+                }
+              ]
+            },
+            "description": "Errors are translated: ?lang=hi, ?lang=es, or Accept-Language."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Photos",
+      "item": [
+        {
+          "name": "Upload a photo (host)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{hostId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/{{propertyId}}/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "images"
+              ]
+            },
+            "description": "multipart/form-data with the photo in a part called file. Needs S3 (or MinIO) configured: without it the answer is a 503 that says so. In Postman, set Settings > General > Working directory to the repository folder so samples/api/photo.jpg is found.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "samples/api/photo.jpg"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('imageId', pm.response.json().id);",
+                  "  pm.collectionVariables.set('imageFile', pm.response.json().url.split('/').pop());",
+                  "}",
+                  "pm.test('stored, or storage not configured', () => pm.expect(pm.response.code).to.be.oneOf([201, 503]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A photo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/images/listings/{{propertyId}}/{{imageFile}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "images",
+                "listings",
+                "{{propertyId}}",
+                "{{imageFile}}"
+              ]
+            },
+            "description": "The bytes of an uploaded photo, served by the app. Run the upload first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove a photo (host)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{hostId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/{{propertyId}}/images/{{imageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "images",
+                "{{imageId}}"
+              ]
+            },
+            "description": "The row goes first; the file is deleted after the commit."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Favourites",
+      "item": [
+        {
+          "name": "Save a listing (guest)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/{{propertyId}}/favorite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "favorite"
+              ]
+            },
+            "description": "Idempotent: saving twice leaves one favourite."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My saved listings (guest)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/favorites?currency=USD",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "favorites"
+              ],
+              "query": [
+                {
+                  "key": "currency",
+                  "value": "USD"
+                }
+              ]
+            },
+            "description": "Newest first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unsave a listing (guest)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/{{propertyId}}/favorite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "favorite"
+              ]
+            },
+            "description": "Removing one that is not saved is not an error."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        {
+          "name": "Book and pay (guest)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "description": "pm_card_visa always succeeds (the simulator answers to Stripe's test ids when no Stripe key is set). Saves {{bookingId}}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"propertyId\": {{propertyId}},\n  \"checkIn\": \"2027-03-10\",\n  \"checkOut\": \"2027-03-13\",\n  \"guests\": 2,\n  \"paymentMethodId\": \"pm_card_visa\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('bookingId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "One booking (guest)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}"
+              ]
+            },
+            "description": "For its guest, or the listing's host."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My bookings (guest)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings?currency=USD",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ],
+              "query": [
+                {
+                  "key": "currency",
+                  "value": "USD"
+                }
+              ]
+            },
+            "description": "Latest check-in first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A listing's bookings (host)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{hostId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/{{propertyId}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "bookings"
+              ]
+            },
+            "description": "For the listing's host."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel a booking (guest)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{bookingId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{bookingId}}",
+                "cancel"
+              ]
+            },
+            "description": "Frees the dates and refunds a paid booking in full."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "Review a listing (guest)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/{{propertyId}}/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "reviews"
+              ]
+            },
+            "description": "Only after a stay there has ended, so with a fresh database this is a 403 (review.notStayed): the API refuses bookings in the past. The hands-on guide makes a past stay with SQL.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"comment\": \"Bright flat, spotless, and the host was lovely.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) { pm.collectionVariables.set('reviewId', pm.response.json().id); }",
+                  "pm.test('created, or no finished stay', () => pm.expect(pm.response.code).to.be.oneOf([201, 403]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A listing's reviews",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/{{propertyId}}/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "{{propertyId}}",
+                "reviews"
+              ]
+            },
+            "description": "Newest first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "One review",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews/{{reviewId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reviews",
+                "{{reviewId}}"
+              ]
+            },
+            "description": "404 until a review exists."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('found, or none yet', () => pm.expect(pm.response.code).to.be.oneOf([200, 404]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit a review (author)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews/{{reviewId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reviews",
+                "{{reviewId}}"
+              ]
+            },
+            "description": "By its author.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 4,\n  \"comment\": \"Bright flat and a lovely host, but the street is noisy at night.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('edited, or none yet', () => pm.expect(pm.response.code).to.be.oneOf([200, 404]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete a review (author)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews/{{reviewId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reviews",
+                "{{reviewId}}"
+              ]
+            },
+            "description": "By its author."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('deleted, or none yet', () => pm.expect(pm.response.code).to.be.oneOf([204, 404]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Recommendations",
+      "item": [
+        {
+          "name": "Ask for somewhere to stay",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recommendations?q=somewhere quiet with a garden in Goa for 2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recommendations"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "somewhere quiet with a garden in Goa for 2"
+                }
+              ]
+            },
+            "description": "Always 200. With no Gemini key the answer says so and comes from an ordinary filtered search."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ask a question about your own numbers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recommendations?q=how much have I spent on bookings?",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recommendations"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "how much have I spent on bookings?"
+                }
+              ]
+            },
+            "description": "Answered by SQL; no model is called."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ask in Spanish",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recommendations?q=how many listings have I saved?&lang=es",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recommendations"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "how many listings have I saved?"
+                },
+                {
+                  "key": "lang",
+                  "value": "es"
+                }
+              ]
+            },
+            "description": "Every answer follows ?lang=."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "GraphQL",
+      "item": [
+        {
+          "name": "GraphQL: search, with hosts and photos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "hi"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "graphql"
+              ]
+            },
+            "description": "One query for the page, one for all the hosts, one for all the photos (@BatchMapping).",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query Search($filter: SearchFilter) {\n  searchProperties(filter: $filter) {\n    totalElements\n    content {\n      id title typeLabel pricePerNight currency\n      host { fullName }\n      images { url }\n    }\n  }\n}",
+                "variables": "{\n  \"filter\": { \"city\": \"goa\" }\n}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GraphQL: one listing",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "graphql"
+              ]
+            },
+            "description": "Labels and attributes in the caller's language.",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query Detail($id: ID!) {\n  property(id: $id, currency: USD) {\n    title typeLabel description pricePerNight currency\n    displayPrice { amount currency }\n    host { fullName }\n    attributes { label value valueLabel }\n    reviews { rating comment }\n  }\n}",
+                "variables": "{\n  \"id\": {{propertyId}}\n}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GraphQL: book (guest)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "graphql"
+              ]
+            },
+            "description": "The same saga as REST. Money comes back as a string.",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Book($input: BookingInput!) {\n  createBooking(input: $input) {\n    id status nights totalAmount currency\n    payment { status provider }\n  }\n}",
+                "variables": "{\n  \"input\": { \"propertyId\": {{propertyId}}, \"checkIn\": \"2027-04-10\", \"checkOut\": \"2027-04-12\", \"guests\": 2, \"paymentMethodId\": \"pm_card_visa\" }\n}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const booking = pm.response.json().data && pm.response.json().data.createBooking;",
+                  "if (booking) { pm.collectionVariables.set('graphqlBookingId', booking.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GraphQL: cancel (guest)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "graphql"
+              ]
+            },
+            "description": "Refunded in full.",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Cancel($id: ID!) {\n  cancelBooking(id: $id) { id status payment { status refundReference } }\n}",
+                "variables": "{\n  \"id\": {{graphqlBookingId}}\n}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GraphQL: review (guest)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Demo-User-Id",
+                "value": "{{guestId}}",
+                "description": "Who is acting."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "graphql"
+              ]
+            },
+            "description": "With no finished stay, a FORBIDDEN error with a translated message: GraphQL answers 200 and lists errors.",
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Review($propertyId: ID!) {\n  createReview(propertyId: $propertyId, input: { rating: 5, comment: \"Lovely stay.\" }) { id rating }\n}",
+                "variables": "{\n  \"propertyId\": {{propertyId}}\n}"
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "propertyId",
+      "value": "1"
+    },
+    {
+      "key": "throwawayId",
+      "value": ""
+    },
+    {
+      "key": "bookingId",
+      "value": "1"
+    },
+    {
+      "key": "graphqlBookingId",
+      "value": ""
+    },
+    {
+      "key": "reviewId",
+      "value": "1"
+    },
+    {
+      "key": "imageId",
+      "value": ""
+    },
+    {
+      "key": "imageFile",
+      "value": ""
+    }
+  ]
+}

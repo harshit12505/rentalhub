@@ -131,6 +131,11 @@ public abstract class Property {
         this.images.add(image);
     }
 
+    /** Orphan removal deletes the row when the transaction commits. */
+    public void removeImage(PropertyImage image) {
+        this.images.remove(image);
+    }
+
     @PrePersist
     void onCreate() {
         Instant now = Instant.now();

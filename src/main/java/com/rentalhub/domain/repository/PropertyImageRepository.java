@@ -28,4 +28,27 @@ public interface PropertyImageRepository extends JpaRepository<PropertyImage, Lo
 
         String getUrl();
     }
+
+    /**
+     * Every photo of many listings, in one query: what GraphQL's {@code images} field on a page
+     * of search results is answered from (see web/graphql/ListingGraphQlController), so a page
+     * of twenty listings costs one query for their photos, not twenty.
+     */
+    @Query("""
+            SELECT i.property.id AS propertyId, i.id AS id, i.url AS url, i.sortOrder AS sortOrder
+            FROM PropertyImage i
+            WHERE i.property.id IN :propertyIds
+            ORDER BY i.property.id, i.sortOrder, i.id
+            """)
+    List<ImageOfListing> findImagesOf(@Param("propertyIds") Collection<Long> propertyIds);
+
+    interface ImageOfListing {
+        Long getPropertyId();
+
+        Long getId();
+
+        String getUrl();
+
+        Integer getSortOrder();
+    }
 }

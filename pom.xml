@@ -26,6 +26,9 @@
         <!-- Not managed by Spring Boot, so pinned here. Each major version pins a Stripe API version. -->
         <stripe-java.version>33.4.2</stripe-java.version>
         <spring-ai.version>2.0.1</spring-ai.version>
+        <!-- Neither is managed by Spring Boot, so both are pinned here. -->
+        <aws-sdk.version>2.55.0</aws-sdk.version>
+        <springdoc.version>3.1.1</springdoc.version>
     </properties>
 
     <dependencyManagement>
@@ -36,6 +39,14 @@
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
                 <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- The AWS SDK's BOM keeps every software.amazon.awssdk module on one version. -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -102,6 +113,32 @@
             <version>${stripe-java.version}</version>
         </dependency>
 
+        <!-- Listing photos: AWS SDK v2 for S3 (or any S3-compatible store, such as MinIO).
+             Only the blocking client is used, so the Netty-based async client is left out. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- GraphQL alongside REST: schema in resources/graphql/, controllers in web/graphql/ -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-graphql</artifactId>
+        </dependency>
+
+        <!-- OpenAPI description at /v3/api-docs and Swagger UI at /swagger-ui.html -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
+        </dependency>
+
         <!-- Bean validation (@NotNull, @Size, ...) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -164,6 +201,18 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- MinIO: a real S3-compatible server in Docker, so image storage is tested with no AWS account -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-minio</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- GraphQlTester, for the GraphQL API tests -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-graphql-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

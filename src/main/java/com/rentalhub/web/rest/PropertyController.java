@@ -10,6 +10,11 @@ import com.rentalhub.service.CurrencyService;
 import com.rentalhub.service.ListingHistoryService;
 import com.rentalhub.service.PropertyService;
 import com.rentalhub.service.SearchService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -42,6 +47,7 @@ import java.util.List;
  * shown converted into it, as {@code displayPrice}. The listing's own price and currency
  * are always there too, and are what a booking charges.
  */
+@Tag(name = "Listings", description = "Listings of every type: apartments, villas, cabins and studios. Reads are open to anyone; changes are for hosts.")
 @RestController
 @RequestMapping("/api/properties")
 public class PropertyController {
@@ -61,6 +67,11 @@ public class PropertyController {
         this.currencyService = currencyService;
     }
 
+    @Operation(summary = "One listing",
+            description = "Everything a detail page shows. Cached: first in memory, then in Redis, then from the database. Add ?currency=USD to also get the price converted (displayPrice); the real price and currency are always there too.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "The listing", content = @Content(mediaType = "application/json", examples = @ExampleObject(ApiExamples.LISTING))),
+                    @ApiResponse(responseCode = "404", description = "There is no such listing", content = @Content(mediaType = "application/problem+json", examples = @ExampleObject(ApiExamples.NOT_FOUND)))})
     @GetMapping("/{id}")
     public PropertyView get(@PathVariable long id, @RequestParam(required = false) Currency currency) {
         return currencyService.inCurrency(propertyService.getListing(id), currency);
@@ -73,6 +84,11 @@ public class PropertyController {
      *                 maxPrice is read in the default currency (INR) and no converted prices
      *                 are added
      */
+    @Operation(summary = "Search listings",
+            description = "One page of active listings, newest first. Every filter is optional. maxPrice is read in currency (INR if not given) and compared with each listing in its own currency at today's rate. Pages are cached in Redis.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "One page of results", content = @Content(mediaType = "application/json", examples = @ExampleObject(ApiExamples.SEARCH_PAGE))),
+                    @ApiResponse(responseCode = "400", description = "A parameter is not valid, such as an unknown currency", content = @Content(mediaType = "application/problem+json", examples = @ExampleObject(ApiExamples.BROKEN_RULE)))})
     @GetMapping
     public SearchResultPage search(@RequestParam(required = false) String city,
                                    @RequestParam(required = false) Integer guests,
@@ -85,6 +101,13 @@ public class PropertyController {
         return currencyService.inCurrency(searchService.search(criteria), currency);
     }
 
+    @Operation(summary = "Create a listing",
+            description = "As a host (X-Demo-User-Id). The type decides which extra attributes are required, and each type has rules of its own (a villa needs a plot of at least 100 m2).",
+            responses = {
+                    @ApiResponse(responseCode = "201", description = "Created; the Location header points at it", content = @Content(mediaType = "application/json", examples = @ExampleObject(ApiExamples.LISTING))),
+                    @ApiResponse(responseCode = "400", description = "A field is missing or a type rule is broken", content = @Content(mediaType = "application/problem+json", examples = @ExampleObject(ApiExamples.INVALID_FIELDS))),
+                    @ApiResponse(responseCode = "403", description = "The acting user is not a host", content = @Content(mediaType = "application/problem+json", examples = @ExampleObject(ApiExamples.NOT_ALLOWED)))})
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json", examples = @ExampleObject(ApiExamples.VILLA_REQUEST)))
     @PostMapping
     public ResponseEntity<PropertyView> create(@RequestHeader(ApiHeaders.DEMO_USER_ID) long userId,
                                                @Valid @RequestBody PropertyRequest request) {
@@ -95,6 +118,14 @@ public class PropertyController {
     }
 
     /** Full replacement: the body is the listing's complete new state (see PropertyRequest). */
+    @Operation(summary = "Replace a listing",
+            description = "By its host. Full replacement: the body is the listing's complete new state. The type cannot change.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "The updated listing", content = @Content(mediaType = "application/json", examples = @ExampleObject(ApiExamples.LISTING))),
+                    @ApiResponse(responseCode = "400", description = "A field or a type rule is broken", content = @Content(mediaType = "application/problem+json", examples = @ExampleObject(ApiExamples.BROKEN_RULE))),
+                    @ApiResponse(responseCode = "403", description = "Not the host of this listing", content = @Content(mediaType = "application/problem+json", examples = @ExampleObject(ApiExamples.NOT_ALLOWED))),
+                    @ApiResponse(responseCode = "404", description = "There is no such listing", content = @Content(mediaType = "application/problem+json", examples = @ExampleObject(ApiExamples.NOT_FOUND)))})
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = "application/json", examples = @ExampleObject(ApiExamples.VILLA_REQUEST)))
     @PutMapping("/{id}")
     public PropertyView update(@PathVariable long id,
                                @RequestHeader(ApiHeaders.DEMO_USER_ID) long userId,
@@ -102,6 +133,12 @@ public class PropertyController {
         return propertyService.update(id, request, userId);
     }
 
+    @Operation(summary = "Delete a listing",
+            description = "By its host. A listing with bookings cannot be deleted (409): bookings are payment records. Its photos are deleted from storage too, after the delete commits.",
+            responses = {
+                    @ApiResponse(responseCode = "204", description = "Deleted"),
+                    @ApiResponse(responseCode = "403", description = "Not the host of this listing", content = @Content(mediaType = "application/problem+json", examples = @ExampleObject(ApiExamples.NOT_ALLOWED))),
+                    @ApiResponse(responseCode = "404", description = "There is no such listing", content = @Content(mediaType = "application/problem+json", examples = @ExampleObject(ApiExamples.NOT_FOUND)))})
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable long id, @RequestHeader(ApiHeaders.DEMO_USER_ID) long userId) {
@@ -112,6 +149,11 @@ public class PropertyController {
      * Every recorded change to the listing, oldest first: when, by whom, and what changed.
      * Only its host may see it, and still can after deleting the listing.
      */
+    @Operation(summary = "A listing's change history",
+            description = "For its host: every recorded change, oldest first, with who made it and exactly which fields changed. Still readable after the listing is deleted.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "The history", content = @Content(mediaType = "application/json", examples = @ExampleObject(ApiExamples.HISTORY))),
+                    @ApiResponse(responseCode = "403", description = "Not the host of this listing", content = @Content(mediaType = "application/problem+json", examples = @ExampleObject(ApiExamples.NOT_ALLOWED)))})
     @GetMapping("/{id}/history")
     public List<ListingHistoryEntry> history(@PathVariable long id,
                                              @RequestHeader(ApiHeaders.DEMO_USER_ID) long userId) {

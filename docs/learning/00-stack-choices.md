@@ -123,14 +123,24 @@ with**, and **what it costs you**. Every entry below is in that shape.
 ## AWS S3 (phase 7)
 - **Why:** the standard for storing user-uploaded files. Keeping images out of the
   database keeps it small and fast.
+- **Library (built in phase 7):** the plain AWS SDK v2 (`software.amazon.awssdk:s3`, pinned
+  through its BOM), not Spring Cloud AWS: one client, a few calls (put, get, delete), and no
+  extra layer to keep compatible with Boot 4.
+- **MinIO** stands in for S3 in the tests and on your machine: a free server that speaks the
+  same protocol, so the real SDK is tested with no AWS account. MinIO stopped publishing on
+  Docker Hub in 2025; the image is pinned from quay.io.
 
 ## REST + Spring GraphQL (phase 7)
 - **Why both:** REST is universal and easy to cache; GraphQL lets a client ask for exactly
   the fields it needs in one request. Building both on the same service layer shows the
   business logic isn't tied to one API style.
+- **Library:** Spring for GraphQL (Boot's `spring-boot-starter-graphql`), with graphql-java
+  underneath: schema-first (`schema.graphqls`), annotated controllers, `@BatchMapping` for
+  the N+1 problem. GraphiQL, a browser query editor, is switched on at `/graphiql`.
 
 ## springdoc-openapi, Lombok, Testcontainers, Docker
 - **springdoc:** generates interactive API docs at `/swagger-ui.html` from the code.
+  Version 3.x is the line built for Spring Boot 4 (3.1.1 here, pinned: Boot doesn't manage it).
 - **Lombok:** generates getters/setters at compile time. Used carefully: never `@Data` on
   entities (see 01-foundation for why).
 - **Testcontainers:** real Postgres in tests instead of a fake in-memory database, because

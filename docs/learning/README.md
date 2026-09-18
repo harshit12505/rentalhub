@@ -14,6 +14,7 @@ interview. One doc per phase, written as each phase is built.
 | [04 — Auditing, logging and scheduling](04-auditing.md) | Audit trails with Hibernate Envers, revisions and `_aud` tables, recording who made a change, the listing history view, what the audit trail can't see, structured logging with key/value pairs and the MDC, request ids and log injection, JSON logs, `@Scheduled` cron jobs, the reviews rules |
 | [05 — Payments, money and currencies](05-payments.md) | BigDecimal vs double and minor units, Stripe PaymentIntents, why a payment can't be inside a transaction, the payment saga and its compensating action, idempotency keys, lost answers and the reconciliation job, refunds, the payment simulator, live exchange rates and how they're cached, `maxPrice` across currencies |
 | [06 — AI: embeddings, RAG and search that understands](06-ai-rag.md) | What an embedding is, cosine similarity, pgvector and HNSW, keeping an index in step with the data, content hashes and quota, hybrid search (meaning + real SQL filters), a preference profile built from SQL, the taste vector as `avg(embedding)`, why the question is parsed with rules and statistics answered by SQL, the prompt and the grounding check that overrules a hallucination, degrading with no key, and testing AI without one |
+| [07 — Photos on S3, three languages, GraphQL, OpenAPI and Postman](07-extras.md) | Object storage and why the bucket stays private, checking a file by its magic bytes, the upload saga and its compensating delete, i18n with a locale resolver and why it must be lazy, translating Spring's own errors, tests that keep translations real, GraphQL vs REST, the N+1 problem and `@BatchMapping`, money as a string scalar, OpenAPI and Swagger UI, Postman collections, and tests that keep documentation from rotting |
 
 ## How to use them
 
@@ -101,3 +102,17 @@ interview. One doc per phase, written as each phase is built.
 | **Hallucination** | The model stating something plausible and false, such as a listing that does not exist. |
 | **Prompt** | The text sent to the model: the instructions, the question, and the facts it may use. |
 | **Token / quota** | Models bill by word fragments, and free tiers cap requests per minute: the reason this phase avoids calling one. |
+| **Object storage (S3)** | A store for files ("objects") under keys, in buckets. No real folders: `listings/1/abc.jpg` is one key. |
+| **Bucket** | A named container of objects in S3. Private unless deliberately opened up. |
+| **MinIO** | A free server that speaks the S3 API, runnable in Docker: S3 on your own machine. |
+| **Magic bytes / file signature** | The fixed first bytes every file format starts with (JPEG: `FF D8 FF`), which say what a file really is. |
+| **Multipart upload** | An HTTP request carrying files as separate "parts" (`multipart/form-data`), which is what an HTML file input sends. |
+| **i18n / l10n** | Internationalisation (making text swappable per language) / localisation (the actual translating). |
+| **Locale** | A language, sometimes with a region (`hi-IN`), which decides the messages and how numbers are written. |
+| **Accept-Language** | The header in which a browser lists the languages its user reads, most preferred first. |
+| **GraphQL** | An API style with one endpoint and a schema, where the client asks for exactly the fields it wants. |
+| **Schema (GraphQL)** | The typed description of everything a GraphQL API can return and accept. |
+| **Query / mutation** | A GraphQL read / a GraphQL change. |
+| **N+1 problem** | Loading a list and then one more query per item for something related: 1 + N queries instead of 2. |
+| **OpenAPI / Swagger UI** | A standard JSON description of a REST API / the web page that shows it and lets you try each call. |
+| **Postman collection** | A saved, shareable set of API requests; an *environment* holds the variables they use, such as the base URL. |

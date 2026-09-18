@@ -66,6 +66,12 @@ public record PropertyView(
     public record Host(long id, String fullName) {
     }
 
-    public record Image(String url, int sortOrder) {
+    /**
+     * One photo. The first by sort order is the cover.
+     *
+     * @param id  what DELETE /api/properties/{id}/images/{imageId} takes
+     * @param url where to fetch it: {@code /images/...} for an uploaded photo, served by this app
+     */
+    public record Image(long id, String url, int sortOrder) {
     }
 }

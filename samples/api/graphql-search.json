@@ -1,0 +1,8 @@
+{
+  "query": "query Search($filter: SearchFilter) { searchProperties(filter: $filter) { totalElements content { id title typeLabel pricePerNight currency host { fullName } images { url } } } }",
+  "variables": {
+    "filter": {
+      "city": "goa"
+    }
+  }
+}

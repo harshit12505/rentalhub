@@ -1,0 +1,3 @@
+{
+  "query": "mutation { createReview(propertyId: 1, input: { rating: 5, comment: \"Lovely stay.\" }) { id rating } }"
+}

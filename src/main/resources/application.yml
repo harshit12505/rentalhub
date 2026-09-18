@@ -94,9 +94,35 @@ spring:
     # whatever language the server's operating system happens to be set to.
     fallback-to-system-locale: false
 
+  graphql:
+    # A browser page for trying queries: /graphiql.
+    graphiql:
+      enabled: true
+
+  servlet:
+    multipart:
+      # Photos only: 5 MB each (rentalhub.images.max-size checks the same), plus room for
+      # the form around them.
+      max-file-size: 5MB
+      max-request-size: 6MB
+      # Read the upload when the controller asks for it, not before the request reaches it:
+      # then a too-large file is refused by the API's own error handling, in the caller's
+      # language, instead of by the servlet container.
+      resolve-lazily: true
+
 server:
   # Render assigns the port through the PORT environment variable.
   port: ${PORT:8080}
+
+# The OpenAPI description (/v3/api-docs) and Swagger UI (/swagger-ui.html): the API's own
+# paths only, not Spring's (the actuator, the GraphQL endpoint).
+springdoc:
+  paths-to-match: /api/**, /images/**
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    # Try-it-out opens with the example filled in, so a request can be sent at once.
+    try-it-out-enabled: true
 
 logging:
   pattern:
@@ -119,8 +145,8 @@ rentalhub:
   cache:
     # Bump the version when a cached record's shape changes, so new code never
     # reads old-shaped JSON; old keys simply expire. v2 (phase 5): listings and search
-    # results gained displayPrice.
-    key-prefix: "rentalhub:v2:"
+    # results gained displayPrice. v3 (phase 7): a listing's images gained their id.
+    key-prefix: "rentalhub:v3:"
     listing-local-ttl: 30s
     listing-local-max-size: 10000
     listing-shared-ttl: 10m
@@ -177,6 +203,23 @@ rentalhub:
       # than a live payment can take (Stripe's read timeout times its retries), so the job
       # never races a payment that is still under way.
       stale-after: ${PAYMENT_STALE_AFTER:10m}
+  # Listing photos; see storage/ and service/ListingImageService.
+  images:
+    max-size: 5MB
+    max-per-listing: 10
+    s3:
+      # No bucket, no uploads: the rest of the app works as usual and an upload is
+      # answered with a clear 503.
+      bucket: ${S3_BUCKET:}
+      region: ${AWS_REGION:ap-south-1}
+      # Only for an S3-compatible server such as MinIO (e.g. http://localhost:9000);
+      # leave empty for AWS itself.
+      endpoint: ${S3_ENDPOINT:}
+      path-style: ${S3_PATH_STYLE:false}
+      # The AWS SDK's own variable names. Leave both empty to use the SDK's default
+      # credential chain (a profile in ~/.aws, or a role on AWS hardware).
+      access-key: ${AWS_ACCESS_KEY_ID:}
+      secret-key: ${AWS_SECRET_ACCESS_KEY:}
   # The AI features; see ai/ and docs/learning/06-ai-rag.md.
   ai:
     # How many listings the vector search brings back before the SQL filters run.

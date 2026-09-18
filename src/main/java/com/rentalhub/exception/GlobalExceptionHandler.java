@@ -1,6 +1,8 @@
 package com.rentalhub.exception;
 
+import com.rentalhub.web.RequestIdFilter;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.context.MessageSource;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.context.i18n.LocaleContextHolder;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
@@ -35,15 +38,18 @@ import java.util.Map;
  * Scoped to {@code @RestController}s only: Thymeleaf page controllers show errors on
  * the form itself rather than returning JSON, so they must not be caught here.
  *
- * The {@code Locale} is filled in by Spring's LocaleResolver (the browser's
- * Accept-Language header today, plus a ?lang= override in phase 7), so adding a
- * language never requires touching this class.
+ * The {@code Locale} is filled in by Spring's LocaleResolver (?lang=, then the language
+ * cookie, then Accept-Language; see config/WebConfig), so adding a language never requires
+ * touching this class. Spring's own errors are translated too: their text comes from the
+ * {@code problemDetail.<exception class>} keys in messages*.properties, and their title
+ * from the same {@code error.title.<status>} keys as everything else.
  */
 @Slf4j
 @RestControllerAdvice(annotations = RestController.class)
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     static final String CONCURRENT_UPDATE = "error.concurrentUpdate";
+    static final String UNEXPECTED = "error.unexpected";
 
     private final MessageSource messages;
 
@@ -101,6 +107,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
+     * Photos can't be stored or read. When no storage is configured at all, retrying won't
+     * help, so only a passing failure carries Retry-After.
+     */
+    @ExceptionHandler(ImageStorageUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleImageStorageUnavailable(ImageStorageUnavailableException ex,
+                                                                       Locale locale) {
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE);
+        if (ex.isTemporary()) {
+            response.header(HttpHeaders.RETRY_AFTER, "60");
+        }
+        return response.body(localizedProblem(HttpStatus.SERVICE_UNAVAILABLE, ex, locale));
+    }
+
+    /**
      * Two requests changed the same rows at the same moment and this one lost: its
      * version check failed (optimistic locking), for example a host saving a listing just
      * as a guest booked it, or Postgres broke a deadlock by cancelling it. Nothing was
@@ -138,6 +158,49 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .toList();
         problem.setProperty("errors", errors);
         return ResponseEntity.badRequest().headers(headers).body(problem);
+    }
+
+    /**
+     * Anything nobody planned for. The details go to the log, with the request id; the caller
+     * gets a translated sentence and that same id, never a stack trace or an exception's text,
+     * which can reveal how the application is built.
+     */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ProblemDetail> handleUnexpected(Exception ex, WebRequest request, Locale locale)
+            throws Exception {
+        if (request instanceof ServletWebRequest servlet && servlet.getResponse() != null
+                && servlet.getResponse().isCommitted()) {
+            // Half a response has already gone out (a photo being streamed when the client left):
+            // there is no way to send an error now, so let the container deal with it.
+            throw ex;
+        }
+        String requestId = MDC.get(RequestIdFilter.MDC_REQUEST_ID);
+        log.atError().setMessage("request.failed")
+                .addKeyValue("error", ex.getClass().getName())
+                .setCause(ex)
+                .log();
+        ProblemDetail problem = problem(HttpStatus.INTERNAL_SERVER_ERROR,
+                new DefaultMessageSourceResolvable(new String[] {UNEXPECTED}, new Object[] {requestId}),
+                UNEXPECTED, locale);
+        problem.setProperty("requestId", requestId);
+        return ResponseEntity.internalServerError().body(problem);
+    }
+
+    /**
+     * Spring MVC's own errors (a missing header, a malformed parameter, unreadable JSON, a file
+     * over the upload limit) arrive here with their detail already translated from the
+     * {@code problemDetail.*} keys; this gives them the same translated title as every other
+     * error, so a client never sees an English "Bad Request" next to a Hindi sentence.
+     */
+    @Override
+    protected ResponseEntity<Object> createResponseEntity(Object body, HttpHeaders headers,
+                                                          HttpStatusCode statusCode, WebRequest request) {
+        // The last step, where the body is final: for most of Spring's errors it is only built
+        // (from the problemDetail.* keys) just before this.
+        if (body instanceof ProblemDetail problem && statusCode instanceof HttpStatus status) {
+            problem.setTitle(title(status, LocaleContextHolder.getLocale()));
+        }
+        return super.createResponseEntity(body, headers, statusCode, request);
     }
 
     private ProblemDetail localizedProblem(HttpStatus status, LocalizedException ex, Locale locale) {

@@ -3,6 +3,11 @@ package com.rentalhub.web.rest;
 import com.rentalhub.ai.RecommendationService;
 import com.rentalhub.domain.model.enums.Currency;
 import com.rentalhub.dto.RecommendationView;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  * body then holds a plainer answer and says so ({@code aiUsed}, {@code semantic}), because the
  * rule for this project is that a missing credential costs you that feature and nothing else.
  */
+@Tag(name = "Recommendations", description = "Ask for a place to stay in plain English. Works with or without a Gemini key.")
 @RestController
 @RequestMapping("/api/recommendations")
 public class RecommendationController {
@@ -36,6 +42,11 @@ public class RecommendationController {
      * @param q        the question, for example "somewhere quiet in Goa for 2 under 5000"
      * @param currency optional: show the prices converted into this currency too
      */
+    @Operation(summary = "Ask a question",
+            description = "Rules read the city, party size and budget out of the question and apply them in SQL; the rest is matched by meaning (pgvector) and Gemini writes the answer from those listings only. Questions about your own numbers are answered by SQL. Always 200: aiUsed and semantic say how much of the AI was used.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "An answer, with the listings it is about", content = @Content(mediaType = "application/json", examples = {@ExampleObject(name = "recommendation", value = ApiExamples.RECOMMENDATION), @ExampleObject(name = "statistics", value = ApiExamples.STATS_ANSWER)})),
+                    @ApiResponse(responseCode = "400", description = "The q parameter is missing", content = @Content(mediaType = "application/problem+json", examples = @ExampleObject(ApiExamples.INVALID_FIELDS)))})
     @GetMapping
     public RecommendationView ask(@RequestParam String q,
                                   @RequestHeader(ApiHeaders.DEMO_USER_ID) long userId,
