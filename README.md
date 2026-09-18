@@ -22,10 +22,11 @@ One deployable Spring Boot application. No separate frontend build, no npm, no s
 | 3 | Bookings: transactions, optimistic locking, retry and recover, concurrency tests | ✅ |
 | 4 | Auditing (Envers) with listing history, structured logging, nightly stale-listing job, reviews | ✅ |
 | 5 | Payments (Stripe test mode, or a built-in simulator), refunds, BigDecimal money maths, prices in other currencies | ✅ |
-| 6–9 | AI/RAG, extras, frontend, deploy | not started |
+| 6 | AI: listings indexed as vectors (pgvector), hybrid search, a preference profile, grounded answers from Gemini, favourites | ✅ |
+| 7–9 | Extras (S3, i18n, GraphQL, OpenAPI), frontend, deploy | not started |
 
-The app has a REST API for listings, bookings (with payments) and reviews (see
-[Trying the API](#trying-the-api-powershell)) and no web pages yet. The startup warning `Cannot find template location: classpath:/templates/` is
+The app has a REST API for listings, bookings (with payments), reviews, favourites and
+recommendations (see [Trying the API](#trying-the-api-powershell)) and no web pages yet. The startup warning `Cannot find template location: classpath:/templates/` is
 expected until pages arrive in phase 8.
 
 ---
@@ -91,6 +92,8 @@ docker compose up -d
 | A `-Dsomething=value` flag is ignored or errors | PowerShell splits unquoted `-D` args at the dot | Quote it: `.\mvnw.cmd test "-Dtest=PropertyFactoryTest"` |
 | A booking is refused with `paymentMethodId`: "This field is required." | Since Phase 5 a booking says how it's paid | Add `"paymentMethodId": "pm_card_visa"` to the body |
 | `"displayPrice": null` everywhere, or `"exchangeRatesUnavailable": true` | The exchange-rate API couldn't be reached (offline?) | The app tries again every minute; same-currency prices still work |
+| `ai.mode ready=false` at startup, and `"aiUsed": false` in answers | No `GEMINI_API_KEY` — the expected state without one | Everything else works. Set the key in the window you start the app from to switch the AI on |
+| `ai.listing.embedFailed` or `ai.search.failed` in the log | The key is wrong, revoked, or the free tier's rate limit was hit | Listings and answers keep working; the index job retries every two minutes |
 
 ---
 
@@ -119,6 +122,10 @@ docker compose up -d
 | `GET` | `/api/reviews/{id}` | anyone | One review |
 | `PUT` | `/api/reviews/{id}` | its author | Replace the rating and comment |
 | `DELETE` | `/api/reviews/{id}` | its author | Delete the review (its history is kept) |
+| `PUT` | `/api/properties/{id}/favorite` | any user | Save a listing. Sending it twice leaves one favourite |
+| `DELETE` | `/api/properties/{id}/favorite` | any user | Unsave it. Removing one that is not saved is not an error |
+| `GET` | `/api/favorites?currency=` | any user | Your saved listings, newest first |
+| `GET` | `/api/recommendations?q=&currency=` | any user | Ask in plain English. Always 200, with or without AI |
 
 Every response carries an `X-Request-Id` header. The same id appears on every log line
 written while handling that request, so a problem report can be matched to the logs.
@@ -130,6 +137,18 @@ written while handling that request, so a problem report can be matched to the l
 - **With a Stripe test key** (`sk_test_…`) in `STRIPE_SECRET_KEY`, the same requests go to
   Stripe.
 - **A live key is refused.**
+
+**Ask in plain English.** `GET /api/recommendations?q=somewhere quiet with a garden in Goa
+for 2` reads the city, the party size and any budget with rules, applies them as real SQL
+filters, ranks what is left by meaning, and has Gemini write the answer from those listings
+only — checking afterwards that every listing it named was really offered.
+- **Without `GEMINI_API_KEY`** there is no indexing and no search by meaning: the same
+  endpoint answers 200 from an ordinary filtered search, with `"aiUsed": false` and a
+  sentence saying so. Questions such as "how much have I spent on bookings?" are answered by
+  SQL either way.
+- **With a key** (free, no card: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)),
+  listings are embedded within a couple of minutes and answers come back with
+  `"aiUsed": true`.
 
 **Prices in your currency.** Add `?currency=USD` (or INR, EUR, GBP, AED) to any read.
 - Rates come from [ExchangeRate-API](https://www.exchangerate-api.com) (Rates By Exchange

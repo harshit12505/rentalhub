@@ -21,6 +21,9 @@ curl.exe -s -i -X POST http://localhost:8081/api/properties -H "Content-Type: ap
 | `cabin-unknown-heating.json` | heating "magic" | 400 `property.attribute.choice` |
 | `invalid-blank-fields.json` | blank title and city | 400 with an `errors` list |
 | `villa-renamed.json` | the villa, renamed (for PUT) | 200 on PUT |
+| `villa-quiet-garden.json` | a calm garden villa in Goa, 9,000 INR (Phase 6) | 201 Created |
+| `apartment-nightlife.json` | a noisy flat above the bars in Goa, 4,000 INR (Phase 6) | 201 Created |
+| `cabin-snow-view.json` | a snow-view cabin in Manali, 6,000 INR (Phase 6) | 201 Created |
 | `villa-moved-to-mumbai.json` | the villa, moved city (for PUT) | 200 on PUT |
 
 ## Bookings (`/api/bookings`)
@@ -89,3 +92,32 @@ creates such a stay with SQL, because the booking API refuses past dates.
 | `review.json` | 5 stars and a comment | 201 after a stay; 403 `review.notStayed` before; 409 `review.alreadyReviewed` the second time |
 | `review-edit.json` | 4 stars, a changed comment (for PUT `/api/reviews/{id}`) | 200 for the author; 403 `review.notAuthor` for anyone else |
 | `review-bad-rating.json` | 6 stars | 400 with an `errors` list |
+
+## Favourites and questions (Phase 6)
+
+Favourites have no request body: `PUT` and `DELETE` say everything.
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code}\n" -X PUT http://localhost:8081/api/properties/1/favorite -H "X-Demo-User-Id: 2"
+```
+
+| Request | What it does | Expected |
+|---|---|---|
+| `PUT /api/properties/{id}/favorite` | saves a listing; saving twice leaves one | 204 |
+| `DELETE /api/properties/{id}/favorite` | removes it; removing one that isn't saved is fine | 204 |
+| `GET /api/favorites?currency=USD` | the saved listings, newest first | 200 |
+| `GET /api/recommendations?q=...&currency=USD` | a question in plain English | always 200 |
+
+The last three listing samples above are worded to be told apart by *meaning*, which is what
+the recommendations endpoint is for. Some questions to try with them:
+
+| Question (`q=`) | What it shows |
+|---|---|
+| `somewhere quiet with a garden in Goa for 2` | the rules read the city and party size; the rest is answered by meaning |
+| `somewhere in Goa under 5000` | the budget is a real SQL filter |
+| `anywhere under $60 a night` (`&currency=USD`) | the budget converted into a ceiling per listing currency |
+| `somewhere like my favourites` | the average of the saved listings' embeddings, computed in Postgres |
+| `how much have I spent on bookings?` | answered by SQL; no model is called at all |
+
+With no `GEMINI_API_KEY` the answer comes back with `"aiUsed": false` and a sentence saying
+search by meaning is off. Nothing else changes.

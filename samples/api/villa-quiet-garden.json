@@ -1,0 +1,13 @@
+{
+  "type": "VILLA",
+  "title": "Quiet garden villa",
+  "description": "A calm hideaway with a shaded garden, hammocks and birdsong. No traffic, no crowds; the beach is a ten minute walk down a lane.",
+  "city": "Goa",
+  "country": "India",
+  "pricePerNight": 9000,
+  "currency": "INR",
+  "maxGuests": 6,
+  "bedrooms": 3,
+  "bathrooms": 2,
+  "attributes": { "plotAreaSqm": "500", "hasPool": "true" }
+}

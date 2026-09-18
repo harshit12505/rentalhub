@@ -84,6 +84,17 @@ with**, and **what it costs you**. Every entry below is in that shape.
   would mean two deployables, two languages and a network hop. "I built RAG in Java with
   Spring AI inside a single deployable" is also a rarer, more interesting story. The RAG
   concepts are the same in any language.
+- **What it actually looks like (built in phase 6):** three starters — chat, embedding (a
+  separate artifact) and the pgvector store — and in the code two interfaces, `ChatModel`
+  and `VectorStore`. Swapping provider means changing configuration and re-embedding
+  everything, because embeddings from different models cannot be compared.
+- **What Spring AI is *not* used for:** reading the question, deciding what kind of question
+  it is, and answering anything with one right answer. Those are rules and SQL (see
+  [06 — AI](06-ai-rag.md)), because they are cheaper, deterministic and testable.
+- **The awkward part:** with no key, Spring AI's auto-configuration fails while the context
+  is being built (the pgvector store takes the embedding model as a constructor argument), so
+  an `EnvironmentPostProcessor` switches all three off. Worth knowing if you ever add an
+  optional provider to a Spring Boot app.
 
 ## Hibernate Envers (phase 4)
 - **Why:** automatic audit history — every change to a listing or booking is recorded in

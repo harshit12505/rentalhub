@@ -1,0 +1,13 @@
+{
+  "type": "CABIN",
+  "title": "Snow view cabin",
+  "description": "A wooden cabin facing the snow line, with a wood stove and thick blankets. Quiet mountain evenings, well away from the town.",
+  "city": "Manali",
+  "country": "India",
+  "pricePerNight": 6000,
+  "currency": "INR",
+  "maxGuests": 4,
+  "bedrooms": 2,
+  "bathrooms": 1,
+  "attributes": { "heatingType": "wood_stove", "distanceToTownKm": "9" }
+}

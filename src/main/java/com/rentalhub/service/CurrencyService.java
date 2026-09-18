@@ -122,6 +122,14 @@ public class CurrencyService {
         return new PriceCeilings(ceilings, complete);
     }
 
+    /** One listing card with its price also shown in {@code to}; unchanged when {@code to} is null. */
+    public PropertySummary inCurrency(PropertySummary listing, Currency to) {
+        if (to == null) {
+            return listing;
+        }
+        return listing.withDisplayPrice(convertForDisplay(listing.pricePerNight(), listing.currency(), to).orElse(null));
+    }
+
     /** The listing with its price also shown in {@code to}; unchanged when {@code to} is null. */
     public PropertyView inCurrency(PropertyView listing, Currency to) {
         if (to == null) {

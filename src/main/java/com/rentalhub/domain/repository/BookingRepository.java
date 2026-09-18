@@ -2,11 +2,13 @@ package com.rentalhub.domain.repository;
 
 import com.rentalhub.domain.model.Booking;
 import com.rentalhub.domain.model.enums.BookingStatus;
+import com.rentalhub.domain.model.enums.Currency;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
@@ -62,6 +64,38 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             ORDER BY b.id
             """)
     List<Long> findRefundOwedIds();
+
+    long countByGuestId(Long guestId);
+
+    long countByGuestIdAndStatus(Long guestId, BookingStatus status);
+
+    /**
+     * What a guest has actually paid, totalled per currency: the money behind the AI phase's
+     * statistics answers, which SQL can give exactly and a language model cannot.
+     *
+     * Grouped by currency rather than summed into one number, because adding ₹ to $ is
+     * meaningless. The caller converts the totals for display if it can (phase 5's rule:
+     * converted money is shown, never stored).
+     */
+    @Query("""
+            SELECT b.currency AS currency, SUM(b.totalAmount) AS total, COUNT(b) AS bookings
+            FROM Booking b
+            WHERE b.guest.id = :guestId
+              AND b.paymentStatus = com.rentalhub.domain.model.enums.PaymentStatus.PAID
+            GROUP BY b.currency
+            ORDER BY b.currency
+            """)
+    List<SpendByCurrency> findSpendByGuestId(@Param("guestId") Long guestId);
+
+    /** One currency's worth of a guest's paid bookings. */
+    interface SpendByCurrency {
+
+        Currency getCurrency();
+
+        BigDecimal getTotal();
+
+        long getBookings();
+    }
 
     /**
      * Does a live booking already overlap these dates?

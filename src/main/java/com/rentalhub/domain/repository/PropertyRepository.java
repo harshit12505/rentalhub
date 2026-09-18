@@ -4,7 +4,10 @@ import com.rentalhub.domain.model.Property;
 import com.rentalhub.domain.model.enums.Currency;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -14,6 +17,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -65,4 +69,31 @@ public interface PropertyRepository extends JpaRepository<Property, Long>, JpaSp
      */
     @Query("SELECT p.id FROM Property p WHERE p.active = true AND p.availableUntil < :date ORDER BY p.id")
     List<Long> findActiveIdsAvailableUntilBefore(@Param("date") LocalDate date);
+
+    /**
+     * The cities that have a listing on the market, so the query parser only recognises a
+     * city that someone could actually stay in. Small, and read once per question.
+     */
+    @Query("SELECT DISTINCT p.city FROM Property p WHERE p.active = true ORDER BY p.city")
+    List<String> findDistinctActiveCities();
+
+    /**
+     * Candidate listings for the AI phase's hybrid search: still on the market, matching the
+     * filters, and not the asker's own. {@code ids} narrows them to what the vector search
+     * proposed; null means "all of them", for the case where there is no vector search.
+     *
+     * Newest first, and always limited, so a question can never drag the whole table into
+     * memory. The caller re-orders what comes back by similarity.
+     */
+    default List<Property> searchCandidates(String city, Integer minGuests,
+                                            Map<Currency, BigDecimal> maxPriceByCurrency,
+                                            Collection<Long> ids, Long notHostedBy, int limit) {
+        Specification<Property> candidates = PropertySpecifications.search(city, minGuests, maxPriceByCurrency, ids);
+        if (notHostedBy != null) {
+            // The host's foreign key column, so this costs no join.
+            candidates = candidates.and((root, query, cb) -> cb.notEqual(root.get("host").get("id"), notHostedBy));
+        }
+        return findAll(candidates, PageRequest.of(0, limit,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")))).getContent();
+    }
 }
