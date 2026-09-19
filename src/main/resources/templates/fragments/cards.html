@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<!--/* Reusable pieces: a listing card (home page, recommendations) and a star rating. */-->
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<!--/* One listing as a search result shows it. The whole card is a link (stretched-link). */-->
+<div th:fragment="card(listing, rating)" class="card h-100 shadow-sm listing-card">
+    <img th:if="${listing.coverImageUrl}" th:src="${listing.coverImageUrl}" class="card-img-top listing-photo"
+         th:alt="${listing.title}" loading="lazy" src="">
+    <div th:unless="${listing.coverImageUrl}" class="card-img-top listing-photo listing-photo-empty"
+         th:text="#{card.noPhoto}" aria-hidden="true">No photo yet</div>
+    <div class="card-body d-flex flex-column">
+        <div class="d-flex justify-content-between small text-body-secondary">
+            <span th:text="#{property.type.__${listing.type}__}">Type of place</span>
+            <span th:text="${listing.city}">Goa</span>
+        </div>
+        <h2 class="h6 card-title mt-1 mb-2">
+            <a class="stretched-link text-decoration-none text-body" th:href="@{/listings/{id}(id=${listing.id})}"
+               th:text="${listing.title}">Quiet garden house</a>
+        </h2>
+        <p class="mb-1">
+            <strong th:text="${@money.format(listing.pricePerNight, listing.currency)}">9,000.00 INR</strong>
+            <span class="small text-body-secondary" th:text="#{card.perNight}">a night</span>
+        </p>
+        <p th:if="${listing.displayPrice}" class="small text-body-secondary mb-1"
+           th:text="|≈ ${@money.format(listing.displayPrice)}|">≈ 93.79 USD</p>
+        <p class="small mb-0 mt-auto">
+            <span th:replace="~{fragments/cards :: rating(${rating})}">★ 4.5</span>
+            <span class="text-body-secondary" th:text="| · #{card.sleeps(${listing.maxGuests})}|"> · Sleeps 6</span>
+        </p>
+    </div>
+</div>
+
+<!--/* An average rating and its count, or "no reviews yet". */-->
+<span th:fragment="rating(rating)">
+    <span th:if="${rating}"><span class="text-warning" aria-hidden="true">★</span>
+        <span th:text="#{card.rating(${rating.average}, ${rating.reviews})}">4.5 (3 reviews)</span></span>
+    <span th:unless="${rating}" class="text-body-secondary" th:text="#{card.noReviews}">No reviews yet</span>
+</span>
+
+</body>
+</html>

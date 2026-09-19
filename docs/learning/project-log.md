@@ -26,23 +26,21 @@ added at the end of every phase.
 | 4 | Auditing, logging & scheduling (+ reviews) | ✅ done | `1fbd71a`, merged via PR #3 (`239a41f`) |
 | 5 | Payments & money (+ currencies) | ✅ done | `95a52da`, merged via PR #4 (`744ef1c`) |
 | 6 | AI / RAG (+ favourites) | ✅ done | `2471607`, merged via PR #5 (`7141989`) |
-| 7 | S3 photos, i18n, GraphQL, OpenAPI, Postman | ✅ done | `Phase 7: …` on branch `phase-7-extras` |
-| 8 | Frontend (Thymeleaf) | next — waiting for your go-ahead | |
-| 9 | Ship: seeder, Docker, Render | | |
+| 7 | S3 photos, i18n, GraphQL, OpenAPI, Postman | ✅ done | `ae3a50b`, merged via PR #6 (`5a7ba46`) |
+| 8 | Frontend (Thymeleaf pages) | ✅ done | `Phase 8: …` on branch `phase-8-frontend` |
+| 9 | Ship: seeder, Docker, Render | next — waiting for your go-ahead | |
 
-**Numbers after Phase 7:** 356 automated tests (217 unit, 139 integration against real
-Postgres, Redis and MinIO), all passing. Twenty-three REST endpoints (listings with their
-history and photos, bookings, reviews, favourites, recommendations), plus a GraphQL API.
-- **Photos:** uploaded to S3 (or MinIO), checked by their bytes, served back by the app; a
-  clear 503 when no storage is configured.
-- **Three languages:** every message, including Spring's own errors, in English, Hindi and
-  Spanish, chosen by `?lang=`, a cookie or `Accept-Language`.
-- **GraphQL** at `/graphql` (try it at `/graphiql`), **Swagger UI** at `/swagger-ui.html`,
-  and a **Postman collection** in `postman/` — the last two held to "every endpoint" by tests.
-- **Carried over from Phase 6:** search by meaning, grounded AI answers and statistics, all
-  of which now also answer in Hindi and Spanish.
-- **Carried over from Phases 4–5:** payments and refunds, prices in five currencies, and an
-  audit trail with who changed what.
+**Numbers after Phase 8:** 389 automated tests (222 unit, 167 integration against real
+Postgres, Redis and MinIO), all passing. Twenty-three REST endpoints and a GraphQL API, and now
+**the website itself**, served by the same app:
+- **Pages:** search with listing cards, a listing's page (photos, details, reviews, booking
+  with Stripe test cards, save), My bookings (with cancel-and-refund), Ask for ideas, and the
+  host's "list a place" form, generated from the factory; photo upload and removal for hosts.
+- **"Sign in as"** in the navbar: a session-based demo user, audited like the API's header.
+- **Three languages** on every page, from a navbar menu; error pages in the same languages,
+  never a stack trace.
+- **Carried over:** photos on S3 (Phase 7), search by meaning and grounded answers (Phase 6),
+  payments, refunds and currencies (Phase 5), the audit trail (Phase 4).
 
 Commit ids changed on 15 Sep 2026, when the history was rewritten (see the log). Older
 notes may still mention the previous ids.
@@ -51,33 +49,34 @@ notes may still mention the previous ids.
 
 ## 2. Your to-do list
 
-### Before Phase 8 (recommended)
+### Before Phase 9 (recommended)
 - [ ] Work through the **[hands-on guide](hands-on-guide.md)**.
-  - **Parts 53–62 are new** (about 40 minutes):
-    - the same error in English, Hindi and Spanish, and the language remembered in a cookie;
-    - a photo upload with no storage (a clear 503), then with MinIO standing in for S3;
-    - what gets refused: a renamed PDF, a PNG claiming to be a JPEG, a 6 MB file;
-    - GraphQL from the command line and in GraphiQL;
-    - Swagger UI, and the whole Postman collection in one run.
-  - Two earlier parts print slightly differently now (Spring's error messages in Parts 9 and
-    21, and `rentalhub:v3:` cache keys); they were re-checked and updated.
-- [ ] **Postman (optional, free):** install the desktop app to use the collection in `postman/`.
-- [ ] **GitHub:** Phase 7 is committed on `phase-7-extras`. Tell me when you want it pushed
+  - **Parts 63–70 are new** (about 40 minutes), in your browser:
+    - search, sign in as a guest, book (a refused booking first, then in Spanish), see it in
+      My bookings in another currency, cancel and get refunded;
+    - a declined card, a favourite, and Ask for ideas in Hindi;
+    - sign in as the host, list a cabin (its own fields appear when you choose the type), and
+      upload a photo, with and without MinIO;
+    - the error pages in three languages.
+  - **Please look at the pages with your own eyes** (Part 64): I checked their layout by
+    measurement, but could not see them (see "Verified by hand" below).
+- [ ] **GitHub:** Phase 8 is committed on `phase-8-frontend`. Tell me when you want it pushed
       and its pull request opened.
-- [ ] **AWS (optional, for Phase 9's deploy):** photos work locally with MinIO. On Render they
-      need a real S3 bucket and an access key; signing up for AWS needs a card. Without it, the
-      deployed app simply refuses uploads with a clear message.
+- [ ] **Render (Phase 9, free):** create an account at render.com, signing in with GitHub. Phase 9
+      deploys the app there; nothing to configure yet.
+- [ ] **AWS (optional):** without an S3 bucket the deployed site simply refuses photo uploads
+      with a clear message.
 - [ ] **Gemini API key (optional, free, no card):** still waiting from Phase 6, if you want to
       see search by meaning (hands-on Part 51).
 
 ### Reading
-- [ ] [07 — Photos on S3, three languages, GraphQL, OpenAPI and Postman](07-extras.md), and
-      answer its interview questions out loud. "The upload succeeded but the database insert
-      failed — what happens?" and "What is the N+1 problem?" are the ones to get right.
-- [ ] The Phase 7 videos in [section 6](#6-youtube-study-plan--every-phase)
-- [ ] If not done yet: [06 — AI](06-ai-rag.md) and the Phase 6 videos.
-- [ ] If not done yet: [05 — Payments, money and currencies](05-payments.md) and the Phase 5
-      videos. "What if the server crashes after charging but before confirming the booking?"
+- [ ] [08 — The web pages: Thymeleaf, sessions and forms](08-frontend.md), and answer its
+      interview questions out loud. "What is CSRF, and how does your app defend against it?" and
+      "What is Post/Redirect/Get?" are the ones to get right.
+- [ ] The Phase 8 videos in [section 6](#6-youtube-study-plan--every-phase)
+- [ ] If not done yet: [07 — Photos, languages, GraphQL](07-extras.md) and its videos.
+- [ ] If not done yet: [06 — AI](06-ai-rag.md) and [05 — Payments](05-payments.md), with their
+      videos.
 
 ### Still open from Phase 1
 - [ ] If not done yet: `docker compose down -v` once (old draft V1 in your local volume),
@@ -86,6 +85,70 @@ notes may still mention the previous ids.
 ---
 
 ## 3. Log
+
+### Session 8 — Phase 8: the web pages (19 Sep 2026)
+
+**Before it:** Phase 7 pushed, PR #6 opened and merged into `main` as `5a7ba46`, at your
+request; the remote branch deleted.
+
+**Built**
+- **Thymeleaf pages** (`web/mvc/`, `templates/`), Bootstrap 5.3.8 from jsDelivr, pinned, with
+  SRI hashes:
+  - `/` search (city, guests, price ceiling, currency) with listing cards, 12 a page, the
+    filters kept in the page links; ratings for the whole page in one query;
+  - `/listings/{id}`: photo carousel, details (the type's own fields, generically), reviews and
+    a review form, booking with Stripe's three test payment methods, prices in another
+    currency, save/unsave; for the host, photo upload and removal;
+  - `/host/listings/new`: the host's form, one fieldset per property type generated from the
+    creators' `AttributeSpec`s, a small script that swaps them, and a no-JavaScript fallback;
+  - `/bookings`: My bookings, totals in another currency, cancel with refund;
+  - `/recommendations`: the Phase 6 answer and the listings it is about, with the AI-off notice;
+  - error pages (404, 400, 403, 405, 413, 500) in the site's frame, in the reader's language.
+- **"Sign in as"** (`web/DemoSession`, `web/mvc/SessionController`): a demo user kept in the
+  session; a new session id on every switch; `returnTo` limited to paths on this site; the
+  audit actor taken from the session when there is no header. Session cookie HttpOnly,
+  SameSite=Lax, never in the URL.
+- **Forms:** every POST redirects, refused ones too (the form and its errors carried as flash
+  attributes); service refusals shown beside their field (`FormErrors`); one-line notices after
+  each action (`PageNotices`); dates bound the ISO way for `<input type="date">`.
+- **135 new message keys** in all three languages; the language menu names each language in
+  itself.
+- **Tests:** 33 more, 389 in all (222 unit, 167 integration).
+  - Page tests (`web/mvc/`): `HomePageTest`, `ListingPageTest`, `HostListingPageTest`,
+    `RecommendationPageTest`, `ListingPhotosPageTest` (against MinIO), `PageModelAdviceTest`.
+    They post forms and follow redirects the way a browser does, and fail on any `??key??`.
+  - `MessagesFilesTest` now checks every key the templates use, including those built from enum
+    values; `PropertyFactoryTest` fails if a template or script names a property type or one of
+    its attributes.
+- **Docs:** [08 — The web pages](08-frontend.md); hands-on guide Parts 63–70; README, CLAUDE.md
+  and the learning README.
+
+**Judgement calls (explained before coding):** D79–D90 below. The notable ones:
+- refused forms redirect too, not only successful ones (D82);
+- no CSRF tokens: SameSite=Lax cookies instead, since Spring Security is ruled out (D81);
+- a select of Stripe test payment methods instead of a card field (D85);
+- Boot's own error page drawn with the site's template and navbar (D86).
+
+**Verified by hand** on 19 Sep 2026, against throwaway containers (Postgres, Redis and MinIO on
+other ports), never the project's own, with the app on port 8092:
+- in the in-app browser: search and USD conversion; sign in as (no `;jsessionid`, same page);
+  a refused booking at `/listings/1#book` with the error beside Check-out and the dates kept;
+  Spanish from the language menu; booking, My bookings in USD, cancel with refund; the audit
+  rows (`user:2`); a declined card; save; Ask for ideas (AI off) and a Hindi statistic; as the
+  host, the cabin form (type switching by the script, two refusals one after the other, then
+  published); an upload with no storage; 6 MB and 20 MB uploads; Boot's 404 page in Spanish
+  with the navbar;
+- with curl: the session cookie's flags, the open-redirect guard, the 405/400/404 pages
+  (and the 405 page in Hindi, as a browser asks for it), and, with MinIO, an upload and a
+  removal posted to the page's own form address, the photo then on the card and in the carousel
+  and served with its one-year cache header;
+- layout by measurement: no sideways scrolling at 375 px on all seven pages, Bootstrap's CSS and
+  JavaScript loaded (so the SRI hashes are right).
+- **Not seen:** how the pages *look*. The browser pane was hidden, so every screenshot timed out
+  and the forms were submitted by script rather than clicked. The page with JavaScript switched
+  off was checked by a test, not in a browser.
+
+**Result:** 389/389 tests passing (clean build).
 
 ### Session 7 — Phase 7: photos, languages, GraphQL, OpenAPI, Postman (18–19 Sep 2026)
 
@@ -654,6 +717,18 @@ Why each non-obvious choice was made. Interviewers love "why".
 | D76 | A test holds the three message files to the same keys and placeholders, Devanagari in Hindi, no English left in Spanish (three words excepted), and every key used in code present | "real translations" can't be judged by a test, but every mechanical failure can be caught |
 | D77 | GraphQL: money as a `Decimal` string scalar, a `cancelBooking` mutation, custom CONFLICT/PAYMENT_FAILED/UNAVAILABLE classifications, a startup failure if a schema field has no fetcher | Float is a double; cancelling is the natural pair of booking; REST's 409/402/503 need a GraphQL equivalent; a missing fetcher should fail loudly |
 | D78 | Tests fail when an endpoint lacks Swagger docs and examples, or a Postman request | documentation that isn't checked goes stale |
+| D79 | A two-parameter Thymeleaf fragment as the layout; Bootstrap 5.3.8 from jsDelivr, pinned, with SRI; one small script, the pages working without it | no layout library for what a fragment already does; no build step; a CDN file cannot be swapped under us |
+| D80 | "Sign in as" = the user id in the session; a new session id on every switch; `returnTo` only a path on this site; the audit actor from the session when there is no header | no Spring Security by the spec; session fixation and open redirects are the two classic holes of a hand-made sign-in; history must still say who |
+| D81 | Session cookie HttpOnly and SameSite=Lax, cookie-only (never in the URL); no CSRF tokens | tokens come with Spring Security, which is ruled out; Lax stops other sites' form posts in current browsers; an id in a URL leaks through logs and Referer |
+| D82 | Every POST ends in a redirect, refused forms included (the form and its errors carried as flash attributes) | reloading never posts again, and the address bar always shows a page that answers GET — links built from it (language, sign in as) would otherwise hit a POST-only address |
+| D83 | A service's refusal is put on the form beside its field (`FormErrors`), from the API's own message keys | one set of rules and one set of texts; a page never re-implements a check |
+| D84 | "List a place" is generated from the creators' `AttributeSpec`s: one fieldset per type, the unchosen ones disabled; Yes/No/not-stated selects; a no-JavaScript reload; a test fails if a template names a type | keeps "a new type = enum + entity + creator + migration + labels" true for the pages too |
+| D85 | Paying on the page = a select of Stripe's test payment methods, no card-number field | card numbers must never reach our server (PCI DSS); Stripe Elements needs a publishable key and a browser flow |
+| D86 | Page errors: a handler for page controllers, Spring Boot's own error page drawn with the same template and navbar (`PageErrorViewResolver`), type mismatches as translated 400s; without the database, the error page still renders | never a stack trace or a "Whitelabel" page; an error page must not fail itself |
+| D87 | The templates' message keys are checked by a test (including keys built from enum values), and every page test fails on `??` | Thymeleaf prints a missing key instead of failing |
+| D88 | Relative links (pages, languages); the home template named `home.html`; Tomcat's `max-swallow-size` 50 MB | all found by hand: an absolute link trusts the scheme behind Render's proxy; `index.html` made Spring Boot add a "welcome page" that rendered it without data; a browser showed "connection reset" for a too-large photo |
+| D89 | Language names in their own language (English, हिन्दी, Español), written in the code, not the message files | a Hindi reader looks for "हिन्दी"; the names are the same in every language |
+| D90 | A page's ratings come from one grouped query (`ReviewService.ratingsFor`) | twelve cards must not mean twelve queries (the N+1 problem, on a web page) |
 
 ---
 
@@ -706,6 +781,15 @@ Each of these is a good "tell me about a problem you solved" story.
 | 7.6 | MinIO's image could not be pulled: "repository does not exist" | MinIO stopped publishing on Docker Hub in 2025 | the pinned community release from quay.io, in the tests and in docker-compose.yml |
 | 7.7 | The GraphQL tests failed: "asyncDispatch CountDownLatch was not set" | Spring for GraphQL answered these requests synchronously, so there was nothing to wait for | the test helper handles both a synchronous and an asynchronous answer |
 | 7.8 | Hindi printed as `????` in the tests' failure messages and in a plain PowerShell window | the console's code page is not UTF-8 (the data itself was right) | the guide sets `[Console]::OutputEncoding` to UTF-8 and suggests Windows Terminal |
+| 8.1 | Every booking from the page was refused, and the page showed no error at all | `BookingRequest`, shared with the API, requires `propertyId`; the form doesn't send it (it is in the address), and `@Valid` ran before the controller could set it — the error sat on a field the form doesn't show | set the id from the address, then validate explicitly. Lesson: a class shared by two front doors can carry a rule only one of them satisfies |
+| 8.2 | On a refused form, the language menu and "sign in as" led to a 405 | the refused form was shown in answer to the POST, so "this page" was the POST-only address | refused forms redirect too, with the form and its errors as flash attributes (D82) |
+| 8.3 | After "sign in as", the home page was a 500 (found in the browser) | Tomcat wrote `;jsessionid=…` into the redirect, not yet knowing the browser keeps cookies; `/;jsessionid=…` didn't match the home controller, so Spring Boot's "welcome page" rendered `index.html` with no data | `tracking-modes: cookie`, and the template renamed `home.html`, so there is no welcome page. MockMvc never rewrites URLs, so no test could see it |
+| 8.4 | A 6 MB photo gave the browser "connection reset" (curl had got its 413 in Phase 7) | the upload is refused from its declared size before the body is read; Tomcat throws away at most 2 MB of an unread body, then closes the connection while the browser is still sending | `server.tomcat.max-swallow-size: 50MB` |
+| 8.5 | `/listings/abc` on the pages would have been a 500 | Spring's type-mismatch error is not an `ErrorResponse`, so the handler's branch for Spring's errors missed it | its own branch, with the API's `problemDetail.*` key |
+| 8.6 | The "no type names in templates" test failed on its first run | "Quiet garden villa" as sample text in a template | neutral sample text; the test stays strict |
+| 8.7 | Page tests: the page links lacked the filters; a test's second past stay was refused by Postgres | MockMvc's `.param()` doesn't fill the query string, which the links are built from; two stays on one listing overlapped (the constraint applies across guests) | queries written into the test URL; different dates |
+| 8.8 | Page links came out absolute (`http://localhost/?page=1`) | built from the current request's full URL | relative paths from the page's own address |
+| 8.9 | A stray broken line (the tail of a Windows path) at the end of the guide's troubleshooting table since Phase 7 | a script passed through the shell lost the backslash in `C:\dev\rentalhub`, so `\r` became a line break | line removed; such scripts are now written to a file first |
 | 5.19 | The history rewrite was undone right after it ran | the recovery command (`git reset --hard refs/original/…`), meant only for when a check failed, was listed with a Run button among the steps and got run | `git reflog` still listed the rewritten `main` (`5305753`), so `git reset --hard 5305753` and a force-push restored it. Lesson: Git rarely loses a commit, because the reflog records every position a branch has had |
 
 ---
@@ -859,6 +943,14 @@ ByteByteGo (system-design concepts) · Fireship (quick overviews) · TechWorld w
 - [ ] [thymeleaf form validation](https://www.youtube.com/results?search_query=thymeleaf+form+validation+errors) — showing errors on the form
 - [ ] [bootstrap 5 tutorial](https://www.youtube.com/results?search_query=bootstrap+5+tutorial) — grid, cards, forms
 - [ ] [http session spring boot](https://www.youtube.com/results?search_query=http+session+spring+boot) — how the "sign in as" switcher remembers you
+- [ ] [post redirect get pattern](https://www.youtube.com/results?search_query=post+redirect+get+pattern) — why every form ends in a redirect
+- [ ] [spring mvc flash attributes](https://www.youtube.com/results?search_query=spring+mvc+redirectattributes+flash+attributes) — messages that survive the redirect
+- [ ] [csrf attack explained](https://www.youtube.com/results?search_query=csrf+attack+explained) — cross-site request forgery
+- [ ] [samesite cookie explained](https://www.youtube.com/results?search_query=samesite+cookie+attribute+explained) — the app's CSRF defence
+- [ ] [session fixation attack](https://www.youtube.com/results?search_query=session+fixation+attack+explained) — why the session id changes on sign-in
+- [ ] [open redirect vulnerability](https://www.youtube.com/results?search_query=open+redirect+vulnerability+explained) — why `returnTo` is checked
+- [ ] [xss cross site scripting explained](https://www.youtube.com/results?search_query=xss+cross+site+scripting+explained) — why `th:text` escapes
+- [ ] [subresource integrity](https://www.youtube.com/results?search_query=subresource+integrity+sri+explained) — the `integrity` hash on the CDN files
 
 ### Phase 9 — Ship
 - [ ] [dockerfile spring boot multi stage](https://www.youtube.com/results?search_query=dockerfile+spring+boot+multi+stage) — build stage vs runtime stage

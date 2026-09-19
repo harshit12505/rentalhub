@@ -1,5 +1,9 @@
 package com.rentalhub.i18n;
 
+import com.rentalhub.domain.model.enums.BookingStatus;
+import com.rentalhub.domain.model.enums.PaymentStatus;
+import com.rentalhub.domain.model.enums.PropertyType;
+import com.rentalhub.domain.model.enums.UserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -114,6 +118,38 @@ class MessagesFilesTest {
         Set<String> missing = new HashSet<>(keys);
         missing.removeAll(ENGLISH.stringPropertyNames());
         assertThat(missing).as("keys used in code but missing from messages.properties").isEmpty();
+    }
+
+    /**
+     * Thymeleaf does not fail on a missing key: it prints ??key_en?? into the page. So the keys the
+     * templates name are checked here, and the ones a template builds from a value
+     * (#{bookings.status.__${b.status}__}) are checked for every value that enum can take.
+     */
+    @Test
+    @DisplayName("every message key the page templates use exists, including those built from an enum value")
+    void everyKeyUsedInTemplatesExists() throws IOException {
+        Pattern comment = Pattern.compile("(?s)<!--/\\*.*?\\*/-->");
+        Pattern used = Pattern.compile("#\\{([a-zA-Z][a-zA-Z0-9]*(?:\\.[a-zA-Z0-9_]+)+)[}(]");
+        Set<String> keys = new TreeSet<>();
+        try (Stream<Path> templates = Files.walk(RESOURCES.resolve("templates"))) {
+            for (Path template : templates.filter(path -> path.toString().endsWith(".html")).toList()) {
+                String html = comment.matcher(Files.readString(template)).replaceAll("");
+                used.matcher(html).results().forEach(match -> keys.add(match.group(1)));
+            }
+        }
+        assertThat(keys).as("keys found in the templates").hasSizeGreaterThan(80);
+        for (Map.Entry<String, Enum<?>[]> family : Map.<String, Enum<?>[]>of(
+                "role.", UserRole.values(),
+                "bookings.status.", BookingStatus.values(),
+                "payment.status.", PaymentStatus.values(),
+                "property.type.", PropertyType.values()).entrySet()) {
+            for (Enum<?> value : family.getValue()) {
+                keys.add(family.getKey() + value.name());
+            }
+        }
+        Set<String> missing = new TreeSet<>(keys);
+        missing.removeAll(ENGLISH.stringPropertyNames());
+        assertThat(missing).as("keys used in templates but missing from messages.properties").isEmpty();
     }
 
     private static Set<String> placeholders(String value) {

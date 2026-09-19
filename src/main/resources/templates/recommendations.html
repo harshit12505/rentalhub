@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(#{ideas.title}, ~{::main})}">
+<body>
+<main class="container py-4">
+    <h1 class="h3 mb-3" th:text="#{ideas.title}">Ask for ideas</h1>
+
+    <div th:unless="${aiReady}" class="alert alert-warning" role="status" th:text="#{ideas.aiOff}">
+        Search by meaning is switched off on this server.</div>
+
+    <form method="get" th:action="@{/recommendations}" class="mb-4">
+        <label class="form-label" for="q" th:text="#{ideas.prompt}">Describe the stay you want</label>
+        <div class="input-group">
+            <input class="form-control" id="q" name="q" maxlength="500" required th:value="${q}"
+                   th:placeholder="#{ideas.placeholder}">
+            <button class="btn btn-primary" type="submit" th:text="#{ideas.ask}">Ask</button>
+        </div>
+        <div class="form-text" th:text="#{ideas.hint}">Try a city, a budget, a number of guests, or "like my favourites".</div>
+    </form>
+
+    <p th:if="${currentUser == null and q != null}" class="alert alert-info" th:text="#{ideas.signIn}">Sign in first.</p>
+
+    <section th:if="${result}">
+        <figure class="answer p-3 rounded border mb-3">
+            <blockquote class="blockquote mb-2"><p class="mb-0" th:text="${result.answer}">I would take [1]…</p></blockquote>
+            <figcaption class="small text-body-secondary">
+                <span th:if="${result.aiUsed}" th:text="#{ideas.written}">Written by the AI from these listings only.</span>
+                <span th:unless="${result.aiUsed}" th:text="#{ideas.plain}">Written by the app itself.</span>
+                <span th:if="${result.semantic}" th:text="| · #{ideas.byMeaning}|"> · ranked by meaning</span>
+            </figcaption>
+        </figure>
+        <h2 class="h5" th:unless="${#lists.isEmpty(result.suggestions)}" th:text="#{ideas.matched}">The listings it matched</h2>
+        <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-4 g-4">
+            <div class="col" th:each="s : ${result.suggestions}">
+                <div th:replace="~{fragments/cards :: card(${s.listing}, ${ratings[s.listing.id]})}">card</div>
+                <p th:if="${s.similarity}" class="small text-body-secondary mt-1"
+                   th:text="#{ideas.similarity(${s.similarity})}">Match 71%</p>
+            </div>
+        </div>
+    </section>
+</main>
+</body>
+</html>

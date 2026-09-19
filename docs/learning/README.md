@@ -15,6 +15,7 @@ interview. One doc per phase, written as each phase is built.
 | [05 — Payments, money and currencies](05-payments.md) | BigDecimal vs double and minor units, Stripe PaymentIntents, why a payment can't be inside a transaction, the payment saga and its compensating action, idempotency keys, lost answers and the reconciliation job, refunds, the payment simulator, live exchange rates and how they're cached, `maxPrice` across currencies |
 | [06 — AI: embeddings, RAG and search that understands](06-ai-rag.md) | What an embedding is, cosine similarity, pgvector and HNSW, keeping an index in step with the data, content hashes and quota, hybrid search (meaning + real SQL filters), a preference profile built from SQL, the taste vector as `avg(embedding)`, why the question is parsed with rules and statistics answered by SQL, the prompt and the grounding check that overrules a hallucination, degrading with no key, and testing AI without one |
 | [07 — Photos on S3, three languages, GraphQL, OpenAPI and Postman](07-extras.md) | Object storage and why the bucket stays private, checking a file by its magic bytes, the upload saga and its compensating delete, i18n with a locale resolver and why it must be lazy, translating Spring's own errors, tests that keep translations real, GraphQL vs REST, the N+1 problem and `@BatchMapping`, money as a string scalar, OpenAPI and Swagger UI, Postman collections, and tests that keep documentation from rotting |
+| [08 — The web pages: Thymeleaf, sessions and forms](08-frontend.md) | Server-side rendering vs a single-page app, Thymeleaf and natural templates, a layout from one fragment, Bootstrap from a CDN with SRI, sessions and the "sign in as" switch, session fixation and open redirects, HttpOnly and SameSite cookies against CSRF, Post/Redirect/Get and flash attributes (for refused forms too), binding and showing form errors, a form generated from the factory, progressive enhancement, error pages, XSS escaping, and testing pages by following redirects |
 
 ## How to use them
 
@@ -116,3 +117,19 @@ interview. One doc per phase, written as each phase is built.
 | **N+1 problem** | Loading a list and then one more query per item for something related: 1 + N queries instead of 2. |
 | **OpenAPI / Swagger UI** | A standard JSON description of a REST API / the web page that shows it and lets you try each call. |
 | **Postman collection** | A saved, shareable set of API requests; an *environment* holds the variables they use, such as the base URL. |
+| **Server-side rendering** | The server builds each page's HTML; the browser just shows it. The opposite of a single-page app, where JavaScript builds pages from JSON. |
+| **Template engine (Thymeleaf)** | Fills an HTML file's `th:` attributes with data to make a page. Thymeleaf templates are valid HTML, so they open in a browser as mock-ups. |
+| **Model** | The data a controller hands to a template to render. |
+| **Fragment** | A named, reusable piece of a template, such as the navbar or the whole page frame. |
+| **CDN** | Content delivery network: servers around the world that serve common files (here Bootstrap) from near the reader. |
+| **SRI** | Subresource Integrity: a hash in a `<script>`/`<link>` tag; the browser refuses the file if it doesn't match. |
+| **Session** | What a server remembers about one browser between requests, found by an id the browser sends back in a cookie. |
+| **Session fixation** | An attack where someone plants a session id in your browser and uses it after you sign in; defeated by changing the id at sign-in. |
+| **Open redirect** | A site that redirects anywhere it is told, letting a trusted-looking link lead to a phishing page. |
+| **CSRF** | Cross-site request forgery: another site making your browser send a request here, with your cookie attached. |
+| **SameSite / HttpOnly** | Cookie flags: don't send the cookie with other sites' requests (Lax: except plain links) / don't let page scripts read it. |
+| **Post/Redirect/Get (PRG)** | Answering a form's POST with a redirect, so reloading the next page never submits the form again. |
+| **Flash attribute** | A value kept in the session for exactly one more request: how a message or a refused form survives a redirect. |
+| **Binding / BindingResult** | Copying posted form fields onto an object / the list of problems found while doing it (and by validation), field by field. |
+| **XSS** | Cross-site scripting: user text that runs as a script in other people's browsers. Escaping output (`th:text`) prevents it. |
+| **Progressive enhancement** | Building a page that works without JavaScript, then using JavaScript to make it nicer. |

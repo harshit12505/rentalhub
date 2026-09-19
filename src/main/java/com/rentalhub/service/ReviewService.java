@@ -8,6 +8,7 @@ import com.rentalhub.domain.repository.BookingRepository;
 import com.rentalhub.domain.repository.PropertyRepository;
 import com.rentalhub.domain.repository.ReviewRepository;
 import com.rentalhub.domain.repository.UserRepository;
+import com.rentalhub.dto.RatingSummary;
 import com.rentalhub.dto.ReviewRequest;
 import com.rentalhub.dto.ReviewView;
 import com.rentalhub.exception.ConflictException;
@@ -18,10 +19,15 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -116,6 +122,21 @@ public class ReviewService {
         return reviews.findByPropertyIdOrderByCreatedAtDescIdDesc(propertyId).stream()
                 .map(ReviewService::toView)
                 .toList();
+    }
+
+    /**
+     * The average rating of each listing that has reviews, for a page of cards, in one query.
+     * Listings with no reviews are simply absent from the map.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, RatingSummary> ratingsFor(Collection<Long> propertyIds) {
+        if (propertyIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, RatingSummary> ratings = new HashMap<>();
+        reviews.findRatingsOf(propertyIds).forEach(row -> ratings.put(row.getPropertyId(), new RatingSummary(
+                BigDecimal.valueOf(row.getAverage()).setScale(1, RoundingMode.HALF_EVEN), row.getReviews())));
+        return ratings;
     }
 
     /** Replaces the rating and comment. Only the author may. */

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(#{newListing.title}, ~{::main})}">
+<body>
+<main class="container py-4">
+    <h1 class="h3 mb-3" th:text="#{newListing.title}">List a place</h1>
+
+    <p th:if="${currentUser == null or !currentUser.host}" class="alert alert-info" th:text="#{newListing.hostsOnly}">
+        Only hosts can list a place.</p>
+
+    <form th:if="${currentUser != null and currentUser.host}" method="post" th:action="@{/host/listings/new}"
+          th:object="${listing}" class="listing-form" novalidate>
+
+        <div th:if="${#fields.hasGlobalErrors()}" class="alert alert-danger" role="alert">
+            <p class="mb-0" th:each="e : ${#fields.globalErrors()}" th:text="${e}">Only hosts can create listings.</p>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label" for="listing-type" th:text="#{newListing.type}">Type of place</label>
+                <select class="form-select" id="listing-type" name="type" th:errorclass="is-invalid" data-listing-type>
+                    <option th:each="t : ${types}" th:value="${t.type}" th:selected="${t.type == listing.type}"
+                            th:text="#{property.type.__${t.type}__}">Type of place</option>
+                </select>
+                <div class="invalid-feedback" th:errors="*{type}">Choose a type.</div>
+                <!--/* Without JavaScript the type's fields cannot swap in place: reload the form for the type chosen. */-->
+                <noscript>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary mt-2" formmethod="get"
+                            th:formaction="@{/host/listings/new}" th:text="#{newListing.showFields}">
+                        Show the fields for this type</button>
+                </noscript>
+            </div>
+
+            <div class="col-12"><h2 class="h5 mt-2" th:text="#{newListing.basics}">The basics</h2></div>
+            <div class="col-md-8">
+                <label class="form-label" for="title" th:text="#{newListing.titleField}">Title</label>
+                <input class="form-control" th:field="*{title}" th:errorclass="is-invalid" maxlength="150">
+                <div class="invalid-feedback" th:errors="*{title}">Required.</div>
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="description" th:text="#{newListing.description}">Description</label>
+                <textarea class="form-control" rows="4" th:field="*{description}" th:errorclass="is-invalid"></textarea>
+                <div class="invalid-feedback" th:errors="*{description}">Required.</div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="city" th:text="#{newListing.city}">City</label>
+                <input class="form-control" th:field="*{city}" th:errorclass="is-invalid">
+                <div class="invalid-feedback" th:errors="*{city}">Required.</div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="country" th:text="#{newListing.country}">Country</label>
+                <input class="form-control" th:field="*{country}" th:errorclass="is-invalid">
+                <div class="invalid-feedback" th:errors="*{country}">Required.</div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="address" th:text="#{newListing.address}">Address (optional)</label>
+                <input class="form-control" th:field="*{address}" th:errorclass="is-invalid">
+                <div class="invalid-feedback" th:errors="*{address}">Too long.</div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="pricePerNight" th:text="#{newListing.price}">Price per night</label>
+                <input class="form-control" type="number" min="0" step="any" th:field="*{pricePerNight}" th:errorclass="is-invalid">
+                <div class="invalid-feedback" th:errors="*{pricePerNight}">Must be positive.</div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" for="currency" th:text="#{newListing.currency}">Currency</label>
+                <select class="form-select" th:field="*{currency}" th:errorclass="is-invalid">
+                    <option th:each="c : ${currencies}" th:value="${c}" th:text="${c}">INR</option>
+                </select>
+                <div class="invalid-feedback" th:errors="*{currency}">Choose one.</div>
+            </div>
+            <div class="col-4 col-md-2">
+                <label class="form-label" for="maxGuests" th:text="#{newListing.maxGuests}">Sleeps</label>
+                <input class="form-control" type="number" min="1" th:field="*{maxGuests}" th:errorclass="is-invalid">
+                <div class="invalid-feedback" th:errors="*{maxGuests}">At least one.</div>
+            </div>
+            <div class="col-4 col-md-2">
+                <label class="form-label" for="bedrooms" th:text="#{newListing.bedrooms}">Bedrooms</label>
+                <input class="form-control" type="number" min="0" th:field="*{bedrooms}" th:errorclass="is-invalid">
+                <div class="invalid-feedback" th:errors="*{bedrooms}">Not negative.</div>
+            </div>
+            <div class="col-4 col-md-2">
+                <label class="form-label" for="bathrooms" th:text="#{newListing.bathrooms}">Bathrooms</label>
+                <input class="form-control" type="number" min="0" th:field="*{bathrooms}" th:errorclass="is-invalid">
+                <div class="invalid-feedback" th:errors="*{bathrooms}">Not negative.</div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="availableUntil" th:text="#{newListing.availableUntil}">Available until (optional)</label>
+                <input class="form-control" type="date" th:field="*{availableUntil}" th:errorclass="is-invalid">
+                <div class="invalid-feedback" th:errors="*{availableUntil}">Not in the past.</div>
+            </div>
+        </div>
+
+        <!--/* One group per property type, generated from that type's own AttributeSpecs. Only the chosen
+               type's group is shown and enabled; a disabled fieldset's inputs are not sent at all. */-->
+        <fieldset th:each="t : ${types}" class="type-fields border rounded p-3 mt-4"
+                  th:attr="data-type=${t.type}" th:disabled="${t.type != listing.type}" th:hidden="${t.type != listing.type}">
+            <legend class="h6 float-none w-auto px-2" th:text="#{newListing.typeFields(#{property.type.__${t.type}__})}">
+                Only for this type</legend>
+            <p th:if="${#lists.isEmpty(t.fields)}" class="small text-body-secondary mb-0" th:text="#{newListing.noTypeFields}">
+                Nothing more to add.</p>
+            <div class="row g-3">
+                <div class="col-md-4" th:each="spec : ${t.fields}"
+                     th:with="path=|attributes[${spec.name}]|, inputId=|attr-${t.type}-${spec.name}|, value=${listing.attributes[spec.name]}">
+                    <label class="form-label" th:for="${inputId}">
+                        <span th:text="#{__${spec.labelKey()}__}">Plot area (m²)</span>
+                        <span th:if="${spec.required}" class="text-danger" th:title="#{newListing.required}" aria-hidden="true">*</span>
+                    </label>
+                    <th:block th:switch="${spec.kind.name()}">
+                        <input th:case="'INTEGER'" class="form-control" type="number" step="1" th:id="${inputId}"
+                               th:name="${path}" th:value="${value}" th:required="${spec.required}"
+                               th:classappend="${#fields.hasErrors(path)} ? 'is-invalid'">
+                        <input th:case="'DECIMAL'" class="form-control" type="number" step="any" th:id="${inputId}"
+                               th:name="${path}" th:value="${value}" th:required="${spec.required}"
+                               th:classappend="${#fields.hasErrors(path)} ? 'is-invalid'">
+                        <!--/* Yes, No, or not stated: a checkbox could not say "not stated". */-->
+                        <select th:case="'BOOLEAN'" class="form-select" th:id="${inputId}" th:name="${path}"
+                                th:classappend="${#fields.hasErrors(path)} ? 'is-invalid'">
+                            <option value="" th:text="#{detail.notStated}">Not stated</option>
+                            <option value="true" th:selected="${value == 'true'}" th:text="#{attribute.value.true}">Yes</option>
+                            <option value="false" th:selected="${value == 'false'}" th:text="#{attribute.value.false}">No</option>
+                        </select>
+                        <select th:case="'CHOICE'" class="form-select" th:id="${inputId}" th:name="${path}"
+                                th:classappend="${#fields.hasErrors(path)} ? 'is-invalid'">
+                            <option value="" th:text="#{newListing.choose}">Choose…</option>
+                            <option th:each="choice : ${spec.choices}" th:value="${choice}"
+                                    th:selected="${value != null and #strings.equalsIgnoreCase(value, choice)}"
+                                    th:text="#{__${spec.choiceLabelKey(choice)}__}">Wood stove</option>
+                        </select>
+                    </th:block>
+                    <div class="invalid-feedback" th:if="${#fields.hasErrors(path)}" th:errors="*{__${path}__}">Required.</div>
+                </div>
+            </div>
+        </fieldset>
+
+        <button type="submit" class="btn btn-primary mt-4" th:text="#{newListing.submit}">Publish listing</button>
+    </form>
+
+    <script th:src="@{/js/listing-form.js}" defer></script>
+</main>
+</body>
+</html>

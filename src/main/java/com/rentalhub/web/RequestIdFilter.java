@@ -26,7 +26,8 @@ import java.util.regex.Pattern;
  *       like an id (a proxy in front of the app may already have assigned one), else a
  *       new random one. It is echoed in the response, so someone reporting a problem can
  *       quote it and the matching log lines can be found.</li>
- *   <li><b>userId</b>: the X-Demo-User-Id header, when it holds a number.</li>
+ *   <li><b>userId</b>: the X-Demo-User-Id header, when it holds a number; on the web pages,
+ *       the user picked in the "sign in as" list (see DemoSession).</li>
  * </ul>
  * Both go into the logging MDC (a per-thread map that every log line on the thread can
  * include), so all of a request's log lines carry them; in the render profile's JSON
@@ -84,11 +85,14 @@ public class RequestIdFilter extends OncePerRequestFilter {
         return String.format(Locale.ROOT, "%08x", ThreadLocalRandom.current().nextInt());
     }
 
-    /** The user named by the demo header, or null if there is none or it isn't a number. */
+    /**
+     * The user named by the demo header (the APIs), else the one signed in on the web pages
+     * (the session), else null. A header that isn't a number is not an acting user.
+     */
     private static Long actingUser(HttpServletRequest request) {
         String header = request.getHeader(ApiHeaders.DEMO_USER_ID);
         if (header == null) {
-            return null;
+            return DemoSession.userId(request);
         }
         try {
             return Long.parseLong(header.trim());

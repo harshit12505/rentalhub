@@ -21,9 +21,14 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.MatchResult;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
@@ -103,6 +108,32 @@ class PropertyFactoryTest {
                     assertThat(TestMessages.english(spec.choiceLabelKey(choice))).isNotBlank();
                 }
             }
+        }
+    }
+
+    /**
+     * The pages build the type-specific fields from the creators' AttributeSpecs. A template that
+     * named a type or one of its attributes would be a type switch in HTML, and a new type would
+     * need a template change too — breaking the "enum + entity + creator + migration + labels" rule.
+     */
+    @Test
+    @DisplayName("no page template or script names a property type or one of its attributes")
+    void pagesKnowNoPropertyType() throws Exception {
+        List<String> typeWords = new ArrayList<>();
+        for (PropertyCreator creator : creators) {
+            typeWords.add("(?i:" + creator.supportedType().name() + ")");
+            creator.attributeSpecs().forEach(spec -> typeWords.add(spec.name()));
+        }
+        Pattern named = Pattern.compile("\\b(" + String.join("|", typeWords) + ")\\b");
+        List<Path> pages;
+        try (Stream<Path> files = Files.walk(Path.of("src", "main", "resources"))) {
+            pages = files.filter(path -> path.toString().matches(".*[\\\\/](templates|static)[\\\\/].*\\.(html|js)"))
+                    .toList();
+        }
+        assertThat(pages).as("templates and scripts found").hasSizeGreaterThan(5);
+        for (Path page : pages) {
+            List<String> hits = named.matcher(Files.readString(page)).results().map(MatchResult::group).toList();
+            assertThat(hits).as("property types or attributes named in %s", page).isEmpty();
         }
     }
 
