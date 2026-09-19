@@ -16,6 +16,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 /** The signed-in guest's trips, each with a cancel button. */
 @Controller
 public class BookingPageController {
@@ -36,7 +39,11 @@ public class BookingPageController {
                              Model model) {
         Long userId = DemoSession.userId(request);
         if (userId != null) {
-            model.addAttribute("bookings", currencies.inCurrency(bookings.forGuest(userId), currency));
+            List<BookingView> mine = currencies.inCurrency(bookings.forGuest(userId), currency);
+            model.addAttribute("bookings", mine);
+            // A cancel button only where cancelling would be accepted: not on a stay that has begun.
+            model.addAttribute("cancellable", mine.stream()
+                    .filter(bookings::cancellableToday).map(BookingView::id).collect(Collectors.toSet()));
         }
         model.addAttribute("currencies", Currency.values());
         model.addAttribute("currency", currency);

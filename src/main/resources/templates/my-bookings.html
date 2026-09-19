@@ -37,7 +37,7 @@
                     <span class="badge text-bg-light border" th:text="#{payment.status.__${b.payment.status}__}">Paid</span>
                 </div>
             </div>
-            <form th:if="${b.status.name() == 'CONFIRMED'}" method="post"
+            <form th:if="${cancellable.contains(b.id)}" method="post"
                   th:action="@{/bookings/{id}/cancel(id=${b.id})}" class="mt-2">
                 <button type="submit" class="btn btn-sm btn-outline-danger" th:text="#{bookings.cancel}">Cancel booking</button>
                 <span class="small text-body-secondary ms-2" th:text="#{bookings.cancelHint}">A paid booking is refunded in full.</span>

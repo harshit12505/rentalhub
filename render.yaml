@@ -1,0 +1,99 @@
+# The whole Render deployment, as a Blueprint: Render reads this file and creates (and later
+# updates) everything in it. Dashboard → New → Blueprint → this repository.
+#
+# Three resources, all free plans, all in one region so they reach each other over Render's
+# private network:
+#   rentalhub        the app, built from ./Dockerfile
+#   rentalhub-db     Postgres 16 (pgvector, btree_gist and hstore are enabled by Flyway's V1/V4)
+#   rentalhub-cache  Key Value, Render's Redis-compatible store (the shared cache)
+#
+# Free-plan limits worth knowing (render.com/docs/free):
+#   - the app sleeps after 15 minutes without a visitor; the next visit wakes it (about a minute,
+#     plus the app's own start-up);
+#   - the free database expires 30 days after it is created (then 14 days' grace to upgrade);
+#   - the free Key Value keeps nothing across a restart — fine for a cache.
+# To stay up for good, change the plans (e.g. web 0.5c-512mb, database 0.1c-256mb): paid.
+
+services:
+  - type: web
+    name: rentalhub
+    runtime: docker
+    plan: free
+    # Singapore: Render's closest region to India. Change all three together, or not at all.
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    # Polled by Render: a deploy goes live only once this answers 200, and an instance that stops
+    # answering is restarted. Redis down reports DEGRADED (still 200): see SharedCacheHealthIndicator.
+    healthCheckPath: /actuator/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: render
+
+      # Filled in by Render from the database below. The app is given the parts, not Render's
+      # ready-made connection string: that one starts postgres://, which Java's driver refuses.
+      - key: DB_HOST
+        fromDatabase:
+          name: rentalhub-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: rentalhub-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: rentalhub-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: rentalhub-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: rentalhub-db
+          property: password
+
+      # Filled in by Render from the Key Value below: redis://red-...:6379 on the private network.
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: rentalhub-cache
+          property: connectionString
+
+      # Yours, and secret: never written here. Render asks for each one when the Blueprint is
+      # first created (later syncs leave them alone). Leave any you don't have empty: that
+      # feature stays off and says so, and everything else works. Add or change them later
+      # under the service's Environment page.
+      - key: GEMINI_API_KEY           # search by meaning and written answers (Google AI Studio)
+        sync: false
+      - key: STRIPE_SECRET_KEY        # sk_test_...; without it, payments use the simulator
+        sync: false
+      - key: S3_BUCKET                # photo uploads; without it, uploads are refused politely
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+
+  - type: keyvalue
+    name: rentalhub-cache
+    plan: free
+    region: singapore
+    # Empty: no connections from outside Render at all; the app reaches it privately.
+    ipAllowList: []
+    # When full, drop the least recently used entries: the right rule for a cache.
+    maxmemoryPolicy: allkeys-lru
+
+databases:
+  - name: rentalhub-db
+    plan: free
+    region: singapore
+    databaseName: rentalhub
+    user: rentalhub
+    # The version the app is built and tested against (docker-compose.yml, the tests).
+    postgresMajorVersion: "16"
+    # Empty: no connections from outside Render. To look inside with psql from your machine, add
+    # your own address here for a while (e.g. - source: 203.0.113.7/32).
+    ipAllowList: []

@@ -163,6 +163,11 @@ public class BookingService {
                 .toList();
     }
 
+    /** Whether this booking can be cancelled today: the rule cancel() applies, asked in advance. */
+    public boolean cancellableToday(BookingView booking) {
+        return rules.cancellableToday(booking.status(), booking.checkIn());
+    }
+
     /** Every booking of one listing, in check-in order. Only its host may see them. */
     @Transactional(readOnly = true)
     public List<BookingView> forListing(long propertyId, long actingUserId) {

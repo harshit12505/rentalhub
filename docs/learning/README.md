@@ -16,6 +16,7 @@ interview. One doc per phase, written as each phase is built.
 | [06 — AI: embeddings, RAG and search that understands](06-ai-rag.md) | What an embedding is, cosine similarity, pgvector and HNSW, keeping an index in step with the data, content hashes and quota, hybrid search (meaning + real SQL filters), a preference profile built from SQL, the taste vector as `avg(embedding)`, why the question is parsed with rules and statistics answered by SQL, the prompt and the grounding check that overrules a hallucination, degrading with no key, and testing AI without one |
 | [07 — Photos on S3, three languages, GraphQL, OpenAPI and Postman](07-extras.md) | Object storage and why the bucket stays private, checking a file by its magic bytes, the upload saga and its compensating delete, i18n with a locale resolver and why it must be lazy, translating Spring's own errors, tests that keep translations real, GraphQL vs REST, the N+1 problem and `@BatchMapping`, money as a string scalar, OpenAPI and Swagger UI, Postman collections, and tests that keep documentation from rotting |
 | [08 — The web pages: Thymeleaf, sessions and forms](08-frontend.md) | Server-side rendering vs a single-page app, Thymeleaf and natural templates, a layout from one fragment, Bootstrap from a CDN with SRI, sessions and the "sign in as" switch, session fixation and open redirects, HttpOnly and SameSite cookies against CSRF, Post/Redirect/Get and flash attributes (for refused forms too), binding and showing form errors, a form generated from the factory, progressive enhancement, error pages, XSS escaping, and testing pages by following redirects |
+| [09 — Shipping: demo data, a container image, and Render](09-ship.md) | Seeding demo data safely (empty-only, all or nothing, dates relative to today), health checks and a DEGRADED status, Docker images and layers, multi-stage builds, running as non-root, sizing the JVM for a 512 MB container, a Render Blueprint as infrastructure as code, private networking and secrets, life behind an HTTPS proxy, and free-tier trade-offs |
 
 ## How to use them
 
@@ -133,3 +134,13 @@ interview. One doc per phase, written as each phase is built.
 | **Binding / BindingResult** | Copying posted form fields onto an object / the list of problems found while doing it (and by validation), field by field. |
 | **XSS** | Cross-site scripting: user text that runs as a script in other people's browsers. Escaping output (`th:text`) prevents it. |
 | **Progressive enhancement** | Building a page that works without JavaScript, then using JavaScript to make it nicer. |
+| **Seeder** | Code that fills an empty database with starting data, here a demo world. |
+| **Health check** | An address a platform polls to ask "are you OK?"; the answer decides whether it sends traffic or restarts the app. |
+| **DEGRADED** | This app's own health status: working, without something it normally uses (Redis). Answers HTTP 200, unlike DOWN (503). |
+| **Docker image / container** | An image is a packaged filesystem plus a start command; a container is a running copy of it. |
+| **Layer** | One step of an image, cached and reused when nothing it depends on changed: the reason a code change rebuilds in seconds. |
+| **Multi-stage build** | A Dockerfile that builds in one image and ships from another, leaving compilers and source behind. |
+| **Non-root user** | Running the app as an account with no special rights, so a break-in gains little. |
+| **Blueprint / infrastructure as code** | Servers, databases and their wiring described in a versioned file (`render.yaml`) instead of dashboard clicks. |
+| **Reverse proxy** | A server in front of the app (Render's) that receives the HTTPS request and passes it on, telling the app the original in `X-Forwarded-*` headers. |
+| **Environment variable** | A named value given to a program by where it runs; how every address, password and key reaches the app. |

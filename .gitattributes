@@ -5,6 +5,8 @@
 # Linux Docker build ("/bin/sh^M: bad interpreter").
 mvnw    text eol=lf
 *.sh    text eol=lf
+# The Dockerfile's RUN lines are shell commands run on Linux: keep LF, like the scripts above.
+Dockerfile text eol=lf
 
 # Windows batch files need CRLF.
 *.cmd   text eol=crlf

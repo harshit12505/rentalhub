@@ -72,6 +72,14 @@ class BookingRules {
         }
     }
 
+    /**
+     * Whether cancelling would be accepted today: a confirmed stay that hasn't started. What the
+     * pages ask before offering a cancel button, so they never offer one the rule above refuses.
+     */
+    boolean cancellableToday(BookingStatus status, LocalDate checkIn) {
+        return status == BookingStatus.CONFIRMED && !checkIn.isBefore(today());
+    }
+
     /** The guest who made a booking and the listing's host may see and cancel it; nobody else. */
     void checkVisibleTo(Booking booking, long actingUserId) {
         boolean isGuest = booking.getGuest().getId() == actingUserId;

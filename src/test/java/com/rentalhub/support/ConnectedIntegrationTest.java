@@ -26,6 +26,7 @@ import java.util.Objects;
         "rentalhub.jobs.stale-listings.cron=-",
         "rentalhub.jobs.payment-reconciliation.cron=-",
         "rentalhub.ai.index-job.cron=-",
+        "rentalhub.demo-data.enabled=false",
         // The models come from FakeAiModels; the vector store is the real one, switched back
         // on over the "no key, no AI" default (see AiEnvironmentPostProcessor).
         "spring.ai.vectorstore.type=pgvector"})

@@ -27,20 +27,20 @@ added at the end of every phase.
 | 5 | Payments & money (+ currencies) | ✅ done | `95a52da`, merged via PR #4 (`744ef1c`) |
 | 6 | AI / RAG (+ favourites) | ✅ done | `2471607`, merged via PR #5 (`7141989`) |
 | 7 | S3 photos, i18n, GraphQL, OpenAPI, Postman | ✅ done | `ae3a50b`, merged via PR #6 (`5a7ba46`) |
-| 8 | Frontend (Thymeleaf pages) | ✅ done | `Phase 8: …` on branch `phase-8-frontend` |
-| 9 | Ship: seeder, Docker, Render | next — waiting for your go-ahead | |
+| 8 | Frontend (Thymeleaf pages) | ✅ done | `01c7b9b`, PR #7 open (not merged yet) |
+| 9 | Ship: seeder, Docker, Render | ✅ done | `Phase 9: …` on branch `phase-9-ship` (built on `phase-8-frontend`) |
 
-**Numbers after Phase 8:** 389 automated tests (222 unit, 167 integration against real
-Postgres, Redis and MinIO), all passing. Twenty-three REST endpoints and a GraphQL API, and now
-**the website itself**, served by the same app:
-- **Pages:** search with listing cards, a listing's page (photos, details, reviews, booking
-  with Stripe test cards, save), My bookings (with cancel-and-refund), Ask for ideas, and the
-  host's "list a place" form, generated from the factory; photo upload and removal for hosts.
-- **"Sign in as"** in the navbar: a session-based demo user, audited like the API's header.
-- **Three languages** on every page, from a navbar menu; error pages in the same languages,
-  never a stack trace.
-- **Carried over:** photos on S3 (Phase 7), search by meaning and grounded answers (Phase 6),
-  payments, refunds and currencies (Phase 5), the audit trail (Phase 4).
+**Numbers after Phase 9 — all nine phases built:** 401 automated tests (225 unit, 176
+integration against real Postgres, Redis and MinIO), all passing. Twenty-three REST endpoints, a
+GraphQL API and the website, in three languages, and now shippable:
+- **It never opens blank:** an empty database gets a demo world (8 users, 16 listings of every
+  type in 5 currencies, stays, reviews, favourites).
+- **A container image** (`Dockerfile`), measured under Render's free limits: starts in about
+  2.5 minutes on a tenth of a CPU, about 360 MB of its 512 MB after traffic.
+- **A Render Blueprint** (`render.yaml`): the app, Postgres with pgvector and a Key Value store,
+  wired together, free plans. **Not deployed yet** — that needs your account (hands-on Part 76).
+- **The README** has the architecture diagram, every environment variable, both walkthroughs,
+  the trade-offs and a CV paragraph.
 
 Commit ids changed on 15 Sep 2026, when the history was rewritten (see the log). Older
 notes may still mention the previous ids.
@@ -49,34 +49,33 @@ notes may still mention the previous ids.
 
 ## 2. Your to-do list
 
-### Before Phase 9 (recommended)
-- [ ] Work through the **[hands-on guide](hands-on-guide.md)**.
-  - **Parts 63–70 are new** (about 40 minutes), in your browser:
-    - search, sign in as a guest, book (a refused booking first, then in Spanish), see it in
-      My bookings in another currency, cancel and get refunded;
-    - a declined card, a favourite, and Ask for ideas in Hindi;
-    - sign in as the host, list a cabin (its own fields appear when you choose the type), and
-      upload a photo, with and without MinIO;
-    - the error pages in three languages.
-  - **Please look at the pages with your own eyes** (Part 64): I checked their layout by
-    measurement, but could not see them (see "Verified by hand" below).
-- [ ] **GitHub:** Phase 8 is committed on `phase-8-frontend`. Tell me when you want it pushed
-      and its pull request opened.
-- [ ] **Render (Phase 9, free):** create an account at render.com, signing in with GitHub. Phase 9
-      deploys the app there; nothing to configure yet.
-- [ ] **AWS (optional):** without an S3 bucket the deployed site simply refuses photo uploads
-      with a clear message.
-- [ ] **Gemini API key (optional, free, no card):** still waiting from Phase 6, if you want to
-      see search by meaning (hands-on Part 51).
+### Now
+- [ ] **Merge the two pull requests, in order.** PR #7 (Phase 8) first; then I open Phase 9's
+      (its branch is built on Phase 8's). Tell me when, or merge #7 on GitHub yourself.
+- [ ] **Deploy to Render** (hands-on Part 76 and the README's *Deploy to Render*): a free account
+      at render.com (sign up with GitHub), then **New → Blueprint**. It deploys from `main`, so
+      after the merges. About 15 minutes, most of it waiting. Tell me what you see if anything
+      differs from the guide: it is the one part I couldn't run.
+- [ ] Work through the **[hands-on guide](hands-on-guide.md)**, Parts 71–75 (about 30 minutes):
+  - the demo world on an empty database, and the seeder leaving a full one alone;
+  - the health check with Redis stopped (DEGRADED, still 200);
+  - building the image, and running it with Render's 512 MB and 0.1 CPU;
+  - the HTTPS addresses and Secure cookie behind a pretend proxy.
+  - Parts 2–70 now start with `$env:DEMO_DATA_ENABLED = "false"` (Part 2), so their ids still hold.
+- [ ] **Look at the pages yourself** (from Phase 8: I never saw them rendered).
+- [ ] **Your CV:** the README ends with a project paragraph and three bullets. Put your live
+      Render address in it once deployed.
+- [ ] **Optional keys, on Render's Environment page:** a Gemini key (free, no card) to switch on
+      search by meaning; AWS for photos; a Stripe test key if you ever get one.
+- [ ] **Remember:** the free Render database expires 30 days after you create it (14 days' grace).
 
 ### Reading
-- [ ] [08 — The web pages: Thymeleaf, sessions and forms](08-frontend.md), and answer its
-      interview questions out loud. "What is CSRF, and how does your app defend against it?" and
-      "What is Post/Redirect/Get?" are the ones to get right.
-- [ ] The Phase 8 videos in [section 6](#6-youtube-study-plan--every-phase)
-- [ ] If not done yet: [07 — Photos, languages, GraphQL](07-extras.md) and its videos.
-- [ ] If not done yet: [06 — AI](06-ai-rag.md) and [05 — Payments](05-payments.md), with their
-      videos.
+- [ ] [09 — Shipping: demo data, a container image, and Render](09-ship.md), and answer its
+      interview questions out loud. "How do you size the JVM for a container?" and "Why a
+      multi-stage Docker build?" are the ones to get right.
+- [ ] The Phase 9 videos in [section 6](#6-youtube-study-plan--every-phase)
+- [ ] If not done yet: [08 — The web pages](08-frontend.md) and its videos.
+- [ ] Then all nine docs once more, end to end, before interviews.
 
 ### Still open from Phase 1
 - [ ] If not done yet: `docker compose down -v` once (old draft V1 in your local volume),
@@ -85,6 +84,75 @@ notes may still mention the previous ids.
 ---
 
 ## 3. Log
+
+### Session 9 — Phase 9: demo data, the container image, Render (19 Sep 2026)
+
+**Before it:** Phase 8 pushed and opened as PR #7 (not merged: you didn't ask). Phase 9 is on its
+own branch, `phase-9-ship`, built on top of `phase-8-frontend`.
+
+**Built**
+- **Demo seeder** (`bootstrap/DemoDataSeeder`, data in `resources/demo/demo-data.json`):
+  - runs at start-up only when the `users` table is empty; `DEMO_DATA_ENABLED=false` switches it
+    off; failures are logged (`demo.failed`), never stop the app;
+  - one transaction, all or nothing; recorded in the history as `system:demo-seeder`;
+  - 8 users (4 hosts, 4 guests), 16 listings (all four types, INR/USD/EUR/GBP/AED), 13 stays
+    (9 finished, 4 upcoming), 8 reviews (one in Hindi, two in Spanish), 8 favourites;
+  - dates in days from today; listings, reviews and favourites through their services; bookings
+    recorded directly, already paid through the simulator (past dates, no payment at start-up).
+- **Health:** `cache/SharedCacheHealthIndicator` replaces Spring Boot's Redis check: Redis down
+  is **DEGRADED** (HTTP 200), not DOWN. Closes the Phase 2 open item.
+- **`Dockerfile`** (+ `.dockerignore`): two stages (Temurin 21 JDK Alpine → JRE Alpine), the
+  dependency download in its own layer, the jar extracted into layers, non-root user, `JAVA_OPTS`
+  for a 512 MB container.
+- **`render.yaml`**: web service (Docker, free, Singapore, health check `/actuator/health`,
+  deploy on commit), Postgres 16 (free), Key Value (free); `DB_*` and `REDIS_URL` wired in by the
+  Blueprint; the keys `sync: false`.
+- **`application-render.yml`**: forwarded headers believed, Secure session cookie, 40 Tomcat
+  threads, 5 database connections, 10 s connection timeout.
+- **My bookings** offers "Cancel" only when cancelling would be accepted (finished demo stays
+  showed the button): `BookingRules.cancellableToday`.
+- **Tests:** 12 more, 401 in all (225 unit, 176 integration): `DemoDataSeederTest`,
+  `SharedCacheHealthIndicatorTest`, `HealthApiTest`, a rule test and a page test for cancelling.
+  Every test context switches the seeder off.
+- **Docs:** [09 — Shipping](09-ship.md); the README rewritten to the spec's deliverables
+  (architecture diagram, environment-variable table, local and Render walkthroughs, trade-offs,
+  CV paragraph); hands-on Parts 71–76, and `DEMO_DATA_ENABLED=false` in Part 2 for the earlier
+  parts; CLAUDE.md; the learning README and glossary.
+
+**Judgement calls (explained before coding):** D91–D99 below. The notable ones:
+- free Render plans, with their limits written down (sleep, 30-day database);
+- Singapore, the closest region to India;
+- tests skipped inside the Docker build (they need Docker themselves);
+- seeded bookings recorded as already paid through the simulator;
+- Redis down = DEGRADED, not DOWN;
+- no demo photos (no image storage by default).
+
+**Research, from Render's documentation (19 Sep 2026):** Blueprint syntax (`keyvalue` replaced
+`redis`; plan names such as `free`, `0.5c-512mb`), Postgres support for `vector`, `btree_gist` and
+`hstore`, the free limits (512 MB and 0.1 CPU; sleep after 15 minutes; the database expires after
+30 days), the automatically set variables (`PORT`=10000, `RENDER_*`), and the health-check rules
+(2xx/3xx within 5 s; live once passing, within 15 minutes; restart after 60 s of failures).
+
+**Verified by hand** on 19 Sep 2026, with throwaway containers (a Docker network of their own),
+never the project's:
+- the image built (198 s the first time, 20 s after a code change), 195 MB to download, layers
+  135 MB of libraries and 475 kB of our code, running as `uid=100(rentalhub)`;
+- run with `--memory=512m --cpus=0.1`, `PORT=10000` and the render profile: started in 148 s,
+  seeded in 20 s, 339 MB after start and 363 MB after every page three times; warm pages in
+  0.1–0.3 s; JSON logs;
+- health UP; Redis stopped → DEGRADED with 200 and the pages still working; Redis back → UP;
+  Postgres stopped → DOWN with 503, after 30 s (hence the 10 s timeout);
+- behind a pretend proxy: `Location: https://rentalhub.onrender.com/api/properties/17`, and
+  `Set-Cookie: …; Secure; HttpOnly; SameSite=Lax`;
+- the local run (`spring-boot:run`): `demo.seeded users=8 listings=16 bookings=13 reviews=8
+  favourites=8`, then `demo.skipped reason=database not empty` on restart and
+  `reason=switched off` with the variable set; the README's booking example (27000.00 INR, then
+  409); Redis stopped and back.
+- **Not verified:** the deployment itself (it needs your Render account), whether Render's form
+  accepts an empty value for a `sync: false` key, the dashboard's exact menu labels, and Part 74
+  on `docker compose`'s own network (mine used a network of its own).
+
+**Result:** 401/401 tests passing.
 
 ### Session 8 — Phase 8: the web pages (19 Sep 2026)
 
@@ -729,6 +797,15 @@ Why each non-obvious choice was made. Interviewers love "why".
 | D88 | Relative links (pages, languages); the home template named `home.html`; Tomcat's `max-swallow-size` 50 MB | all found by hand: an absolute link trusts the scheme behind Render's proxy; `index.html` made Spring Boot add a "welcome page" that rendered it without data; a browser showed "connection reset" for a too-large photo |
 | D89 | Language names in their own language (English, हिन्दी, Español), written in the code, not the message files | a Hindi reader looks for "हिन्दी"; the names are the same in every language |
 | D90 | A page's ratings come from one grouped query (`ReviewService.ratingsFor`) | twelve cards must not mean twelve queries (the N+1 problem, on a web page) |
+| D91 | A demo seeder at start-up: only into an empty `users` table, one transaction, data in JSON with dates relative to today, through the services, recorded as `system:demo-seeder`, never failing start-up, `DEMO_DATA_ENABLED` to switch off | the spec: never blank, toggleable; it must never touch real data, leave half a world, or rot as the calendar moves |
+| D92 | Seeded bookings recorded directly, already paid through the simulator (not through BookingService) | reviews need finished stays, which the booking rules rightly refuse; paying at start-up would make starting depend on Stripe; the simulator still refunds them |
+| D93 | Redis down reports a custom DEGRADED status (HTTP 200) instead of Boot's DOWN | the app works without Redis; a platform that restarts or unroutes on DOWN would take a working site away. Closes the Phase 2 open item |
+| D94 | Two-stage Dockerfile (Temurin 21 JDK Alpine → JRE Alpine), dependencies before source, jar extracted into layers, non-root user with root-owned files, `exec` start | small image with no build tools; code-only rebuilds in seconds; least privilege; clean shutdown on the platform's signal |
+| D95 | Tests skipped inside the image build | they need Docker (Testcontainers), which a build container doesn't have; they run before pushing. A CI pipeline is the next step |
+| D96 | JVM: heap 60% of the container, Serial GC, the quick compiler only, exit on out-of-memory | a 512 MB, 0.1-CPU box: memory outside the heap needs room (measured 363 MB used), and start-up speed matters more than peak speed |
+| D97 | `render.yaml`: free plans, Singapore, the database as parts (`fromDatabase`), `REDIS_URL` from the Key Value, keys `sync: false`, no outside access to the database or cache | ₹0 to show it; closest region to India; Render's connection string is `postgres://`; secrets never in Git; nothing but the app needs to reach them |
+| D98 | The render profile believes `X-Forwarded-*`, sends the session cookie only over HTTPS, and sizes threads (40), connections (5) and the connection wait (10 s) for the free machine | behind Render's TLS proxy the app must write `https://` addresses; a hung check beyond Render's 5 s is a failure anyway |
+| D99 | Pages offer "Cancel" only when `BookingRules.cancellableToday` says so | the demo's finished stays showed a button the service would refuse; one rule, asked by both |
 
 ---
 
@@ -790,6 +867,11 @@ Each of these is a good "tell me about a problem you solved" story.
 | 8.7 | Page tests: the page links lacked the filters; a test's second past stay was refused by Postgres | MockMvc's `.param()` doesn't fill the query string, which the links are built from; two stays on one listing overlapped (the constraint applies across guests) | queries written into the test URL; different dates |
 | 8.8 | Page links came out absolute (`http://localhost/?page=1`) | built from the current request's full URL | relative paths from the page's own address |
 | 8.9 | A stray broken line (the tail of a Windows path) at the end of the guide's troubleshooting table since Phase 7 | a script passed through the shell lost the backslash in `C:\dev\rentalhub`, so `\r` became a line break | line removed; such scripts are now written to a file first |
+| 9.1 | The first image would never have started: no `application.jar` in it | Spring Boot's extract keeps the jar's own name (`rentalhub-1.0.0.jar`); the Dockerfile's start command assumed `application.jar` | rename the jar before extracting, as Spring's own recipe does. Found by listing the image's `/app` before running it |
+| 9.2 | `RedisDownTest` found three Goa villas instead of one | it builds its own application context, so the new seeder filled its empty database first | every test context switches the seeder off; the break doubled as proof that seeding works with Redis down |
+| 9.3 | With the database stopped, `/actuator/health` took 30 s to say DOWN | the connection pool waits 30 s for a connection by default; Render gives up after 5 s, and the hung request holds a thread | `connection-timeout: 10s` in the render profile |
+| 9.4 | The seeder's page test didn't find the Goa villa on the home page | results are newest first, and the villa is created first, so it is on page 2 | the test searches Goa |
+| 9.5 | Finished demo stays showed "Cancel booking" in My bookings | the page offered cancel for every confirmed booking; the service refuses once the stay has begun | the page asks the service's own rule (`cancellableToday`) |
 | 5.19 | The history rewrite was undone right after it ran | the recovery command (`git reset --hard refs/original/…`), meant only for when a check failed, was listed with a Run button among the steps and got run | `git reflog` still listed the rewritten `main` (`5305753`), so `git reset --hard 5305753` and a force-push restored it. Lesson: Git rarely loses a commit, because the reflog records every position a branch has had |
 
 ---
@@ -959,6 +1041,11 @@ ByteByteGo (system-design concepts) · Fireship (quick overviews) · TechWorld w
 - [ ] [deploy spring boot to render](https://www.youtube.com/results?search_query=deploy+spring+boot+render.com) — the whole flow
 - [ ] [render blueprint render yaml](https://www.youtube.com/results?search_query=render+blueprint+render.yaml) — infrastructure as code
 - [ ] [twelve factor app](https://www.youtube.com/results?search_query=twelve+factor+app+explained) — why config lives in environment variables
+- [ ] [docker tutorial for beginners](https://www.youtube.com/results?search_query=docker+tutorial+for+beginners) — images, containers, layers
+- [ ] [spring boot actuator health check](https://www.youtube.com/results?search_query=spring+boot+actuator+health+check) — health indicators and statuses
+- [ ] [docker container run as non root user](https://www.youtube.com/results?search_query=docker+container+run+as+non+root+user) — least privilege
+- [ ] [reverse proxy x-forwarded-for headers](https://www.youtube.com/results?search_query=reverse+proxy+x-forwarded-proto+headers+explained) — why the render profile trusts them
+- [ ] [github actions maven ci](https://www.youtube.com/results?search_query=github+actions+maven+java+ci) — the next step: tests on every push
 
 ### Interview preparation (any time)
 - [ ] [how to explain your project in an interview](https://www.youtube.com/results?search_query=how+to+explain+your+project+in+interview+software+engineer)
