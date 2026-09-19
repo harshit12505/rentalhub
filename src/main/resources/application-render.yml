@@ -1,5 +1,34 @@
-# Settings for the Render deployment (Render sets SPRING_PROFILES_ACTIVE=render).
-# Phase 9 adds the rest of the deployment settings.
+# Settings for the Render deployment (render.yaml sets SPRING_PROFILES_ACTIVE=render).
+# Everything account-specific (database, Redis, keys) arrives as environment variables; see the
+# README's table. This file only says how to behave there.
+
+server:
+  # Render ends HTTPS at its own proxy and sends the request on as plain HTTP, telling the app
+  # the original scheme and host in X-Forwarded-* headers. Believing them makes the addresses
+  # the app writes (a 201's Location, Swagger UI's server URL) https:// and the right host. Safe
+  # here because the container can only be reached through that proxy.
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        # The site is only ever served over HTTPS there: the session cookie never travels without it.
+        secure: true
+  tomcat:
+    threads:
+      # 200 by default. The free instance has 0.1 of a CPU and 512 MB: more threads than this
+      # only queue for the same CPU, and each one costs memory.
+      max: 40
+
+spring:
+  datasource:
+    hikari:
+      # The free database has 256 MB of memory; every connection costs it some. Five covers a
+      # request, the scheduled jobs and the embedding updates at once.
+      maximum-pool-size: 5
+      # How long a request waits for a connection before failing: 30 s by default. With the
+      # database down, a health check or a page would hang that long, holding one of the 40
+      # threads; 10 s is plenty for a healthy one.
+      connection-timeout: 10s
 
 logging:
   structured:

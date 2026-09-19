@@ -27,6 +27,7 @@ import java.util.Objects;
  *
  * What the application would otherwise reach out to is pinned down:
  * <ul>
+ *   <li>the demo data is switched off: each test starts from an empty database;</li>
  *   <li>every scheduled job is switched off ("-"): they run only when a test calls them;</li>
  *   <li>no Gemini key is set, so this context is also the proof the spec asks for: the whole
  *       application boots and works with the AI switched off. Tests that need the AI features
@@ -40,6 +41,8 @@ import java.util.Objects;
         "rentalhub.jobs.stale-listings.cron=-",
         "rentalhub.jobs.payment-reconciliation.cron=-",
         "rentalhub.ai.index-job.cron=-",
+        // Every test builds the data it needs on an empty database (DemoDataSeederTest seeds on purpose).
+        "rentalhub.demo-data.enabled=false",
         // Counts every SQL statement, so a test can prove how many queries something costs
         // (GraphQlApiTest: a page of search results with hosts and photos). The per-session
         // summary Hibernate would otherwise log after every request stays off.

@@ -1,10 +1,10 @@
 # Hands-on guide: test RentalHub yourself
 
-Everything built so far (Phases 1–8), tested by you, step by step. Each step has the
+Everything built so far (Phases 1–9), tested by you, step by step. Each step has the
 exact PowerShell command and what you should see. Every command and expected output here
 was run and checked against a fresh database: Parts 0–17 on 13 Sep 2026, Parts 18–26 on
 14 Sep 2026, Parts 28–34 on 15 Sep 2026, Parts 36–44 on 16 Sep 2026, Parts 46–50 on
-18 Sep 2026, Parts 53–61 on 18–19 Sep 2026, and Parts 63–70 on 19 Sep 2026. Phase 5 changed what some earlier parts
+18 Sep 2026, Parts 53–61 on 18–19 Sep 2026, and Parts 63–75 on 19 Sep 2026. Phase 5 changed what some earlier parts
 print (bookings are now paid for, cache keys gained a currency), so those parts were run
 again on 16 Sep 2026 and updated. Phase 7 changed two things earlier parts show: Spring's
 own error messages are now the app's (Part 9, rows 8 and 11; Part 21, row 8), and the
@@ -14,11 +14,15 @@ what to expect rather than what was seen. In Parts 63–70 the outputs are the r
 steps were checked another way than the one written: the forms were submitted by script in the
 browser, the cookie flags read from the response rather than in DevTools, and the MinIO upload
 (Part 69, step 3) posted with curl to the same form address. Part 68, step 6 (JavaScript
-switched off) was checked by a test of the address it loads, not in a browser.
+switched off) was checked by a test of the address it loads, not in a browser. Parts 73–75
+were run on a Docker network of their own rather than `rentalhub_default`, with an empty
+database (so the container seeded rather than skipped), and Part 76 was not run at all: it
+needs your Render account.
 
 **Time:** about 45 minutes for Parts 0–17 (Phases 1–2), 30 more for Parts 18–26
 (Phase 3), 30 more for Parts 28–34 (Phase 4), 30 more for Parts 36–44 (Phase 5),
-25 more for Parts 46–52 (Phase 6), 40 more for Parts 53–62 (Phase 7), and 40 more for Parts 63–70 (Phase 8).
+25 more for Parts 46–52 (Phase 6), 40 more for Parts 53–62 (Phase 7), 40 more for Parts 63–70 (Phase 8), and 30 more for
+Parts 71–75 (Phase 9), plus the Render deploy (Part 76).
 **You'll use three PowerShell windows:**
 
 | Window | Used for |
@@ -68,7 +72,8 @@ the ones written here.)
 .\mvnw.cmd test
 ```
 
-✅ Near the end: `Tests run: 269, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS`.
+✅ Near the end: `Tests run: 401, Failures: 0, Errors: 0, Skipped: 0` and `BUILD SUCCESS`
+(the number as of Phase 9; it grows with every phase).
 It takes a minute or two: the test suite starts its own throwaway Postgres and Redis in
 Docker.
 
@@ -89,6 +94,14 @@ by the test names, e.g. "villa rules", "updates".
 
 ```powershell
 $env:PORT = "8081"
+```
+
+Since Phase 9 the app fills an empty database with demo data on start-up. Parts 2–70 build
+their own data, with the ids written here, so switch that off in this window (Part 71 switches
+it back on):
+
+```powershell
+$env:DEMO_DATA_ENABLED = "false"
 ```
 
 ```powershell
@@ -2977,6 +2990,247 @@ addresses); the first and third from the pages' own handler. Both render `error.
 
 ---
 
+# Phase 9 — Demo data, health, the container image, Render (Parts 71–76)
+
+Parts 71–75 run on your machine; Part 76 is the real deployment and needs a Render account.
+
+## Part 71 — The demo world
+
+Until now Window 1 has had `DEMO_DATA_ENABLED` set to `false` (Part 2), because every part
+built its own data. Now let the app build its demo world into an empty database.
+
+1. `Ctrl+C` in Window 1, then switch the demo data back on (in Window 1):
+
+   ```powershell
+   Remove-Item Env:DEMO_DATA_ENABLED
+   ```
+
+2. In Window 2, an empty database:
+
+   ```powershell
+   docker compose down -v
+   ```
+
+   ```powershell
+   docker compose up -d
+   ```
+
+3. In Window 1:
+
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   ✅ Among the last lines (your duration will differ):
+   ```
+   payments.mode provider=SIMULATED reason=no STRIPE_SECRET_KEY: nothing is charged
+   images.mode storage=NONE reason=no S3_BUCKET: photo uploads are switched off
+   Started RentalHubApplication in 9.038 seconds (process running for 9.719)
+   demo.seeded users=8 listings=16 bookings=13 reviews=8 favourites=8 durationMs=992
+   ```
+
+4. What was made, in Window 2:
+
+   ```powershell
+   docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT property_type, count(*), string_agg(DISTINCT currency, ', ') AS currencies FROM properties GROUP BY property_type ORDER BY 1;"
+   ```
+
+   ✅ All four types, in five currencies:
+   ```
+    property_type | count |       currencies
+   ---------------+-------+-------------------------
+    APARTMENT     |     6 | AED, EUR, GBP, INR, USD
+    CABIN         |     3 | GBP, INR
+    STUDIO        |     4 | AED, EUR, GBP, INR
+    VILLA         |     3 | AED, EUR, INR
+   ```
+
+   ```powershell
+   docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT DISTINCT changed_by FROM revinfo;"
+   ```
+
+   ✅ `system:demo-seeder` — the history says who made it.
+
+5. Open **http://localhost:8081**. ✅ **16 place(s) found**, **Page 1 of 2**, and cards with
+   ratings such as "4 (1 review(s))". **Sign in as** lists Asha Menon, Daniel Brooks, Layla Haddad
+   and Carmen Ruiz (hosts) and Ravi Kumar, Meera Iyer, Sofía García and Arjun Rao (guests).
+   Sign in as **Ravi Kumar** and open **My bookings**: two past stays and one coming up (the snow
+   view cabin). Only the one coming up has a **Cancel booking** button.
+
+6. Stop and start the app again (`Ctrl+C`, then the same command). ✅ This time:
+   ```
+   demo.skipped reason=database not empty
+   ```
+   It never adds to a database that has data. (`$env:DEMO_DATA_ENABLED = "false"` gives
+   `demo.skipped reason=switched off` instead.)
+
+---
+
+## Part 72 — The health check, with Redis gone
+
+Render asks `/actuator/health` whether the app is well. Redis is only a cache, so losing it
+must not make the app look dead.
+
+```powershell
+curl.exe -s http://localhost:8081/actuator/health
+```
+
+✅ `{"groups":["liveness","readiness"],"status":"UP"}`
+
+Stop Redis:
+
+```powershell
+docker stop rentalhub-redis
+```
+
+```powershell
+curl.exe -s -w "  <- HTTP %{http_code}`n" http://localhost:8081/actuator/health
+```
+
+✅
+```
+{"groups":["liveness","readiness"],"description":"Redis is unreachable: every read goes to the database","status":"DEGRADED"}  <- HTTP 200
+```
+
+Still 200, so Render keeps the site up, and the site still works: reload
+http://localhost:8081 — slower, but all there. Now bring Redis back:
+
+```powershell
+docker start rentalhub-redis
+```
+
+✅ A few seconds later the same `curl.exe` says `"status":"UP"` again: the app reconnects by itself.
+
+---
+
+## Part 73 — Build the container image
+
+This is exactly what Render will do with the `Dockerfile`. In Window 2:
+
+```powershell
+docker build -t rentalhub .
+```
+
+✅ About three minutes the first time (it downloads Java, Maven and every library), ending with
+`naming to docker.io/library/rentalhub`. Now run the same command again: ✅ a few seconds,
+nearly every step says `CACHED`. After a change to the code, only the last steps run again
+(about 20 seconds).
+
+Its layers, newest first:
+
+```powershell
+docker history rentalhub --format "{{.Size}}`t{{.CreatedBy}}" | Select-Object -First 9
+```
+
+✅ Our own code is a small layer (about 475 kB), the libraries a big one (135 MB) that a new
+release doesn't touch:
+```
+0B      ENTRYPOINT ["sh" "-c" "exec java $JAVA_OPTS …
+0B      EXPOSE [8080/tcp]
+0B      ENV JAVA_OPTS=-XX:MaxRAMPercentage=60 -XX:+U…
+0B      USER rentalhub
+475kB   COPY /workspace/target/extracted/application…
+4.1kB   COPY /workspace/target/extracted/snapshot-de…
+4.1kB   COPY /workspace/target/extracted/spring-boot…
+135MB   COPY /workspace/target/extracted/dependencie…
+```
+
+And it doesn't run as root:
+
+```powershell
+docker run --rm --entrypoint id rentalhub
+```
+
+✅ `uid=100(rentalhub) gid=101(rentalhub) groups=101(rentalhub)`
+
+---
+
+## Part 74 — Run it the way Render will
+
+Render's free plan gives the app 512 MB of memory and a tenth of a CPU, sets `PORT=10000`, and
+turns on the `render` profile. Docker can impose exactly that. The container joins the network
+`docker compose` made (`rentalhub_default`), so it reaches Postgres and Redis by their names.
+
+1. **Stop the app in Window 1** (`Ctrl+C`): the container will use the same database.
+
+2. In Window 1:
+
+   ```powershell
+   docker run --rm --name rentalhub-container --network rentalhub_default --memory=512m --cpus=0.1 -p 8082:10000 -e PORT=10000 -e SPRING_PROFILES_ACTIVE=render -e DB_HOST=rentalhub-postgres -e REDIS_URL=redis://rentalhub-redis:6379 rentalhub
+   ```
+
+   ✅ The log is now JSON, one object per line (what Render's log view shows). Be patient: on a
+   tenth of a CPU it takes about **two and a half minutes**, then:
+   ```
+   ..."message":"Started RentalHubApplication in 147.983 seconds (process running for 162.2)"...
+   ```
+   followed by a `"message":"demo.skipped"` line with `"reason":"database not empty"` (Part 71
+   filled it).
+
+3. In Window 2, its memory:
+
+   ```powershell
+   docker stats rentalhub-container --no-stream --format "{{.MemUsage}}"
+   ```
+
+   ✅ About `339MiB / 512MiB` after start; open a few pages at **http://localhost:8082** and it
+   settles around `363MiB / 512MiB`. Once warm, pages answer in a fraction of a second.
+
+4. Stop it: `Ctrl+C` in Window 1 (or `docker stop rentalhub-container`).
+
+---
+
+## Part 75 — Behind Render's proxy
+
+Render ends HTTPS at its own proxy and passes the request on as plain HTTP, saying what the
+original was in `X-Forwarded-*` headers. Start the container again as in Part 74, then pretend to
+be that proxy:
+
+```powershell
+curl.exe -s -i -X POST http://localhost:8082/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" -H "X-Forwarded-Proto: https" -H "X-Forwarded-Host: rentalhub.onrender.com" --data "@samples/api/studio.json" | Select-String "HTTP/|Location"
+```
+
+✅ The new listing's address is `https://` and the public host, not `http://localhost`:
+```
+HTTP/1.1 201
+Location: https://rentalhub.onrender.com/api/properties/17
+```
+
+And the session cookie is only ever sent over HTTPS:
+
+```powershell
+curl.exe -s -i -X POST http://localhost:8082/session/user -d "userId=5" | Select-String "Set-Cookie"
+```
+
+✅ `Set-Cookie: JSESSIONID=…; Path=/; Secure; HttpOnly; SameSite=Lax` (browsers treat
+`localhost` as secure, so signing in still works on http://localhost:8082).
+
+Stop the container (`Ctrl+C`).
+
+---
+
+## Part 76 — Deploy to Render
+
+**Not run by me:** it needs your Render account. The steps follow Render's documentation and the
+Blueprint was checked against it; what you'll see is described, not copied.
+
+Follow the README's [Deploy to Render](../../README.md#deploy-to-render), steps 1–8. What to check
+along the way:
+- **Blueprint preview** (step 4): three resources, `rentalhub` (web service, Docker),
+  `rentalhub-db` (PostgreSQL) and `rentalhub-cache` (Key Value), all free, in Singapore.
+- **The build** (step 6): the `rentalhub` service's **Logs** show the same Docker steps as Part 73,
+  then JSON lines as in Part 74. The first deploy takes a while: the image build (about 5 minutes),
+  then the start-up on the free CPU (about 2.5 minutes).
+- **Live:** `https://<your address>/actuator/health` answers `"status":"UP"`, the home page shows
+  16 places, and the logs contain `"message":"demo.seeded"`.
+- **After 15 minutes without visitors** the service sleeps; the next visit shows Render's
+  "waking up" page for about a minute, then the app starts as above.
+
+If any step differs from this description, tell me what you saw: this part is the one written
+without a run.
+
+---
+
 ## What you just proved
 
 - [ ] All automated tests pass on your machine (see the project log for the current count)
@@ -3036,6 +3290,11 @@ addresses); the first and third from the pages' own handler. Both render `error.
 - [ ] The "list a place" form shows each type's own fields, generated from the factory, and works without JavaScript
 - [ ] Every page in English, Hindi and Spanish, prices and dates written the reader's way
 - [ ] 404, 400, 405 and a too-large photo are pages in the reader's language, never a stack trace
+- [ ] An empty database gets a demo world (every type, five currencies, stays, reviews, favourites), recorded as `system:demo-seeder`; a database with data is never touched
+- [ ] With Redis stopped the health check says DEGRADED with HTTP 200, and UP again when it's back
+- [ ] The image builds in layers (our code ~475 kB, libraries 135 MB), rebuilds in seconds, and runs as a non-root user
+- [ ] Under Render's free limits (512 MB, 0.1 CPU) it starts, and stays around 360 MB after traffic
+- [ ] Behind a proxy it writes `https://` addresses and a `Secure` cookie
 
 ---
 
@@ -3082,6 +3341,13 @@ addresses); the first and third from the pages' own handler. Both render `error.
 | Part 66: the date boxes show `dd-mm-yyyy` or `mm/dd/yyyy` | the browser draws its date picker in your Windows language | expected; it sends `2026-09-26` to the app either way |
 | Part 69: the 6 MB upload shows "This site can't be reached" | the app was started before this phase's `application.yml` (`max-swallow-size`) | restart the app |
 | Part 69, step 3: the upload says storage is switched off | the six variables were set in another window, or after the app started | set them in Window 1, then start the app |
+| Parts 2–70: 16 listings you didn't create, or ids that don't match | the demo data is on (Phase 9) | `$env:DEMO_DATA_ENABLED = "false"` in Window 1, then Part 0 again |
+| Part 71: `demo.skipped reason=database not empty` on the first start | the database wasn't empty | `docker compose down -v`, `docker compose up -d`, start again |
+| Part 71: `demo.skipped reason=switched off` | `DEMO_DATA_ENABLED` is still `false` in this window | `Remove-Item Env:DEMO_DATA_ENABLED`, start again |
+| Part 73: `failed to solve` or `Cannot connect to the Docker daemon` | Docker Desktop isn't running | start it, wait for "Engine running" |
+| Part 74: `network rentalhub_default not found` | `docker compose up -d` wasn't run from this folder, or the project has another name | `docker network ls` shows the right name (ends in `_default`) |
+| Part 74: nothing for minutes after `Starting RentalHubApplication` | a tenth of a CPU is slow: about 2.5 minutes is normal | wait; without `--cpus=0.1` it starts in about 10 seconds |
+| Part 74: `Web server failed to start. Port 8082 was already in use` | something else uses 8082 | pick another: `-p 8083:10000`, and use that port |
 
 **Tip:** to see a JSON response nicely indented, pipe it through PowerShell:
 `curl.exe -s http://localhost:8081/api/properties/1 | ConvertFrom-Json | ConvertTo-Json -Depth 5`

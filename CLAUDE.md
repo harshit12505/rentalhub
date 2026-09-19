@@ -153,6 +153,23 @@ server in tests. Its exceptions are checked (`StripeException`).
   Security). `server.tomcat.max-swallow-size` stays above any photo, or a browser gets
   "connection reset" instead of the too-large message. Bootstrap 5.3.8 from jsDelivr with SRI
   hashes; a new CDN file needs its `integrity` hash too.
+- Demo data (phase 9): `bootstrap/DemoDataSeeder` (an `ApplicationRunner`) seeds
+  `resources/demo/demo-data.json` only when `users` is empty, in one transaction, as
+  `system:demo-seeder`, never throwing (`demo.failed` is logged). Dates are days from today.
+  Listings/reviews/favourites go through their services; bookings are recorded directly, paid
+  through the simulator. `rentalhub.demo-data.enabled` (`DEMO_DATA_ENABLED`, default true); every
+  test context sets it false (a new `@SpringBootTest` context must too). The hands-on guide sets
+  it false in Part 2.
+- Health (phase 9): Boot's Redis check is off; `cache/SharedCacheHealthIndicator` reports Redis
+  down as DEGRADED (status order `down,out-of-service,degraded,up,unknown`; HTTP 200). Only a
+  required dependency may make health DOWN. No details are shown publicly.
+- Deployment (phase 9): `Dockerfile` (Temurin 21 JDK Alpine build → JRE Alpine run; the jar is
+  renamed `application.jar` before `-Djarmode=tools extract --layers`; non-root; `JAVA_OPTS`
+  defaults for 512 MB; tests skipped in the build). `render.yaml` Blueprint: web (docker, free,
+  singapore, `/actuator/health`), Postgres 16 (free), Key Value (free); `DB_*` via
+  `fromDatabase`, `REDIS_URL` via `fromService` (type `keyvalue`), keys `sync: false`.
+  `application-render.yml`: forwarded headers (framework), Secure cookie, 40 threads, pool 5,
+  10 s connection timeout, ECS JSON logs. A new env var goes into the README's table too.
 - Retry wraps the transaction from the outside: each attempt is a fresh transaction, in a
   separate bean (a call to `this` skips the `@Transactional` proxy). Retry only
   `ConcurrencyFailureException` (lost version race, deadlock victim), never business refusals.
@@ -189,7 +206,7 @@ server in tests. Its exceptions are checked (`StripeException`).
   uploads off), `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `S3_ENDPOINT` +
   `S3_PATH_STYLE` for an S3-compatible server (MinIO) only.
   Jobs: `STALE_LISTINGS_CRON`/`_ZONE`, `PAYMENT_RECONCILIATION_CRON`, `PAYMENT_STALE_AFTER`,
-  `EMBEDDING_INDEX_CRON`.
+  `EMBEDDING_INDEX_CRON`. Demo data: `DEMO_DATA_ENABLED`. JVM (image): `JAVA_OPTS`.
   `spring.profiles.default: local`; Render sets `SPRING_PROFILES_ACTIVE=render`.
 - Case conversion of identifiers uses `Locale.ROOT`.
 - Javadoc explains *why*, not what.
@@ -220,7 +237,7 @@ domain/repository/  Spring Data JPA interfaces
 factory/       PropertyCreator, AbstractPropertyCreator (template method), PropertyFactory,
                AttributeSpec, AttributeKind, TypeAttributes; impl/ one creator per type
 cache/         TwoLevelCache, PropertyCacheInvalidator, SearchCacheKeys(+KeyGenerator),
-               CacheNames, CacheSettings (wired in config/CacheConfig)
+               CacheNames, CacheSettings (wired in config/CacheConfig), SharedCacheHealthIndicator
 service/       PropertyService, SearchService, ListingHistoryService, BookingService
                (+ BookingAttempt, BookingUpdates, BookingRules, BookingSettings,
                OverlapConstraint), PaymentService, CurrencyService (+ PriceCeilings),
@@ -239,12 +256,13 @@ web/           RequestIdFilter (request id + user in the MDC, audit actor), Demo
                MoneyFormat, PageExceptionHandler, PageErrorViewResolver)
 dto/ (+ DemoUser, RatingSummary), exception/ (GlobalExceptionHandler, ApiRoutingErrorHandler), scheduling/
                (StaleListingJob, PaymentReconciliationJob, EmbeddingIndexJob), bootstrap/
-               (DemoDataSeeder)
+               (DemoDataSeeder; data in resources/demo/demo-data.json)
 resources/     application.yml (+ -local, -render), db/migration/, messages*.properties,
                graphql/schema.graphqls, templates/ (layout + fragments/, one per page,
                error.html), static/css/app.css, static/js/listing-form.js
 docs/learning/ one teaching doc per phase
 postman/       the collection (every endpoint) and the local environment
+Dockerfile, .dockerignore, render.yaml   the image and the Render Blueprint (repo root)
 samples/api/   request bodies, sample photos and GraphQL documents for trying the API by hand
 ```
 
@@ -278,7 +296,7 @@ One phase at a time, in order. Never scaffold a later phase early. After each ph
 | 6 | AI / RAG: embeddings, preference profile, hybrid search, stats mode (+ favourites) | done |
 | 7 | Extra mile: S3, i18n, GraphQL, OpenAPI, Postman | done |
 | 8 | Frontend: Thymeleaf pages | done |
-| 9 | Ship: seeder, Dockerfile, render.yaml, README, deploy guide | — |
+| 9 | Ship: seeder, Dockerfile, render.yaml, README, deploy guide | done |
 
 ## Commands
 ```powershell
@@ -312,7 +330,7 @@ docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"   # cac
 - 2026-09-13 — No Redis pub/sub L1 invalidation — single instance; documented as the multi-instance fix.
 - 2026-09-13 — Factory update path; PUT = full replacement; type immutable; `CreatePropertyRequest` → `PropertyRequest`.
 - 2026-09-13 — Deleting a listing with bookings → 409 — bookings are history/payment records.
-- Open: /actuator/health goes DOWN when Redis is down (app still works) — decide in phase 9.
+- ~~Open: /actuator/health goes DOWN when Redis is down~~ — decided 2026-09-19: DEGRADED (HTTP 200), see phase 9.
 - 2026-09-14 — Bookings read the listing with OPTIMISTIC_FORCE_INCREMENT — bookings/edits of one listing take turns; a booking never commits a stale price; cost: one cache eviction per booking.
 - 2026-09-14 — Framework 7 RetryTemplate + try/catch recover, not @Retryable/@Recover — no @Recover in Framework 7; nesting explicit; unit-testable.
 - 2026-09-14 — Retry ConcurrencyFailureException (version race + deadlock) — the race test hit a real 40P01: overlapping inserts deadlock inside the exclusion constraint.
@@ -359,3 +377,10 @@ docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"   # cac
 - 2026-09-19 — "List a place" generated from `AttributeSpec`s; a test fails if a template names a type — the new-type rule holds for pages.
 - 2026-09-19 — Paying on the page = a select of Stripe test payment methods, no card field — card numbers never reach the server.
 - 2026-09-19 — Boot's own error page drawn with the site's template and navbar; `home.html` not `index.html`; `max-swallow-size` 50 MB; relative links — found by hand in a browser.
+- 2026-09-19 — Demo seeder: empty `users` only, one transaction, JSON data with dates relative to today, via the services, `system:demo-seeder`, never fails start-up, `DEMO_DATA_ENABLED` — never blank, never over real data, never half-made.
+- 2026-09-19 — Seeded bookings recorded directly, paid through the simulator — reviews need finished stays; start-up must not depend on Stripe.
+- 2026-09-19 — Redis down = DEGRADED (200), Boot's Redis indicator off — the app works without Redis; the platform must not kill it.
+- 2026-09-19 — Dockerfile: two stages, layered jar renamed application.jar, non-root, JAVA_OPTS (MaxRAMPercentage=60, SerialGC, TieredStopAtLevel=1, ExitOnOutOfMemoryError), tests skipped in the build — measured 363 MB of 512 under Render's free limits; tests need Docker.
+- 2026-09-19 — render.yaml: free plans, Singapore, DB as parts, REDIS_URL from Key Value, keys sync:false, no outside access to DB/cache — ₹0; nearest region; secrets never in Git.
+- 2026-09-19 — Render profile trusts X-Forwarded-*, Secure cookie, 40 threads, pool 5, 10 s connection timeout — behind Render's TLS proxy on 0.1 CPU; Render's health check gives up after 5 s.
+- 2026-09-19 — Pages offer cancel only when `BookingRules.cancellableToday` — finished demo stays showed a button the service refuses.

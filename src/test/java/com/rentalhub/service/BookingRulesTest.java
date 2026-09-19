@@ -129,6 +129,17 @@ class BookingRulesTest {
                 });
     }
 
+    @Test
+    @DisplayName("the question the pages ask agrees with the rule: a confirmed stay, until its check-in day")
+    void cancellableTodayAgreesWithTheRule() {
+        assertThat(rules.cancellableToday(BookingStatus.CONFIRMED, TODAY)).isTrue();
+        assertThat(rules.cancellableToday(BookingStatus.CONFIRMED, TODAY.plusDays(5))).isTrue();
+        assertThat(rules.cancellableToday(BookingStatus.CONFIRMED, TODAY.minusDays(1))).isFalse();
+        assertThat(rules.cancellableToday(BookingStatus.PENDING, TODAY.plusDays(5))).isFalse();
+        assertThat(rules.cancellableToday(BookingStatus.CANCELLED, TODAY.plusDays(5))).isFalse();
+        assertThat(rules.cancellableToday(BookingStatus.COMPLETED, TODAY.plusDays(5))).isFalse();
+    }
+
     // -------------------------------------------------------------- helpers
 
     /** Asserts the refusal names the right field and key, and that the key has English text. */

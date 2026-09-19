@@ -188,6 +188,22 @@ class ListingPageTest extends PageTest {
     }
 
     @Test
+    @DisplayName("My bookings offers to cancel only a stay that hasn't begun, never a finished one")
+    void cancelOnlyBeforeTheStay() throws Exception {
+        MockHttpSession guest = signIn(guestId);
+        mvc.perform(book(guest, today.plusDays(20), today.plusDays(22), "pm_card_visa"))
+                .andExpect(redirectedUrl("/bookings"));
+        jdbc.update("""
+                INSERT INTO bookings (property_id, guest_id, check_in, check_out, guests, total_amount, currency, status)
+                VALUES (?, ?, ?, ?, 2, 24000.00, 'INR', 'CONFIRMED')
+                """, villaId, guestId, today.minusDays(6), today.minusDays(4));
+
+        String page = html(mvc.perform(get("/bookings").session(guest)));
+
+        assertThat(page).containsOnlyOnce("Cancel booking</button>");
+    }
+
+    @Test
     @DisplayName("another user's booking cannot be cancelled from the page")
     void cancelSomeoneElses() throws Exception {
         mvc.perform(book(signIn(guestId), today.plusDays(20), today.plusDays(22), "pm_card_visa"))

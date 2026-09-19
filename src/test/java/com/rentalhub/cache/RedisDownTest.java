@@ -26,6 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest(properties = {
         "spring.data.redis.url=redis://localhost:1",
+        // The test counts what it creates itself.
+        "rentalhub.demo-data.enabled=false",
         // Lettuce keeps retrying the dead port in the background; at shutdown Netty
         // complains that it can no longer schedule those retries. Harmless, just noisy.
         "logging.level.io.netty.util.concurrent.DefaultPromise.rejectedExecution=OFF"

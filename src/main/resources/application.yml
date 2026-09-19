@@ -166,9 +166,25 @@ management:
       exposure:
         # caches: GET /actuator/caches lists every cache and its type
         include: health,info,caches
+  endpoint:
+    health:
+      status:
+        # DEGRADED (see SharedCacheHealthIndicator): worse than UP, better than DOWN. A status
+        # that isn't DOWN or OUT_OF_SERVICE answers HTTP 200, so a platform's health check keeps
+        # the site up while it works without Redis.
+        order: down,out-of-service,degraded,up,unknown
+  health:
+    # Replaced by SharedCacheHealthIndicator: Boot's own check says DOWN when Redis is away,
+    # which would fail the whole app's health for a cache it can live without.
+    redis:
+      enabled: false
 
 # Cache tuning; see CacheSettings for what each value means and why.
 rentalhub:
+  # The demo world (bootstrap/DemoDataSeeder): created on start-up when the database has no users
+  # at all, so a fresh install or deployment never opens blank. Never touches a database with data.
+  demo-data:
+    enabled: ${DEMO_DATA_ENABLED:true}
   cache:
     # Bump the version when a cached record's shape changes, so new code never
     # reads old-shaped JSON; old keys simply expire. v2 (phase 5): listings and search

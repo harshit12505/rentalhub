@@ -1,0 +1,19 @@
+# What `docker build` does not need to see. Keeping it small makes the build faster (the whole
+# folder is sent to Docker first) and keeps secrets and local clutter out of the image.
+
+# Build output and IDE files: the image builds its own.
+target/
+.idea/
+*.iml
+.vscode/
+
+# Version control and local secrets.
+.git/
+.env
+.env.*
+
+# Not part of the app.
+docs/
+postman/
+samples/
+*.log

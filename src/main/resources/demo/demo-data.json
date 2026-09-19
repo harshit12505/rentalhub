@@ -1,0 +1,146 @@
+{
+  "users": [
+    { "key": "asha",   "fullName": "Asha Menon",    "email": "asha.menon@example.com",    "role": "HOST" },
+    { "key": "daniel", "fullName": "Daniel Brooks", "email": "daniel.brooks@example.com", "role": "HOST" },
+    { "key": "layla",  "fullName": "Layla Haddad",  "email": "layla.haddad@example.com",  "role": "HOST" },
+    { "key": "carmen", "fullName": "Carmen Ruiz",   "email": "carmen.ruiz@example.com",   "role": "HOST" },
+    { "key": "ravi",   "fullName": "Ravi Kumar",    "email": "ravi.kumar@example.com",    "role": "GUEST" },
+    { "key": "meera",  "fullName": "Meera Iyer",    "email": "meera.iyer@example.com",    "role": "GUEST" },
+    { "key": "sofia",  "fullName": "Sofía García",  "email": "sofia.garcia@example.com",  "role": "GUEST" },
+    { "key": "arjun",  "fullName": "Arjun Rao",     "email": "arjun.rao@example.com",     "role": "GUEST" }
+  ],
+
+  "listings": [
+    { "key": "goa-villa", "host": "asha", "listing": {
+      "type": "VILLA", "title": "Quiet garden villa", "city": "Goa", "country": "India",
+      "description": "A calm hideaway with a shaded garden, hammocks and birdsong. No traffic, no crowds; the beach is a ten minute walk down a lane.",
+      "pricePerNight": 9000, "currency": "INR", "maxGuests": 6, "bedrooms": 3, "bathrooms": 2,
+      "attributes": { "plotAreaSqm": "500", "hasPool": "true" } } },
+
+    { "key": "goa-flat", "host": "asha", "listing": {
+      "type": "APARTMENT", "title": "Nightlife flat above the bars", "city": "Goa", "country": "India",
+      "description": "Right on the busiest strip: bars, live music and street food below the balcony until late. Lively, loud and five minutes from the beach.",
+      "pricePerNight": 4000, "currency": "INR", "maxGuests": 4, "bedrooms": 2, "bathrooms": 1,
+      "attributes": { "floorNumber": "2" } } },
+
+    { "key": "manali-cabin", "host": "asha", "listing": {
+      "type": "CABIN", "title": "Snow view cabin", "city": "Manali", "country": "India",
+      "description": "A wooden cabin facing the snow line, with a wood stove and thick blankets. Quiet mountain evenings, well away from the town.",
+      "pricePerNight": 6000, "currency": "INR", "maxGuests": 4, "bedrooms": 2, "bathrooms": 1,
+      "attributes": { "heatingType": "WOOD_STOVE", "distanceToTownKm": "9" } } },
+
+    { "key": "munnar-cabin", "host": "asha", "listing": {
+      "type": "CABIN", "title": "Tea garden cabin", "city": "Munnar", "country": "India",
+      "description": "A small cabin among the tea estates, with mist in the mornings and walking trails from the door. Peaceful and green.",
+      "pricePerNight": 5200, "currency": "INR", "maxGuests": 3, "bedrooms": 1, "bathrooms": 1,
+      "attributes": { "heatingType": "ELECTRIC", "distanceToTownKm": "6.5" } } },
+
+    { "key": "chennai-flat", "host": "asha", "listing": {
+      "type": "APARTMENT", "title": "Marina view apartment", "city": "Chennai", "country": "India",
+      "description": "Bright one-bedroom flat near the beach road, with a sea breeze and the Marina a short walk away.",
+      "pricePerNight": 2500, "currency": "INR", "maxGuests": 2, "bedrooms": 1, "bathrooms": 1,
+      "attributes": { "floorNumber": "3" } } },
+
+    { "key": "bengaluru-studio", "host": "asha", "listing": {
+      "type": "STUDIO", "title": "Compact city studio", "city": "Bengaluru", "country": "India",
+      "description": "One room with a kitchenette and a work desk, close to the metro and the cafes of Indiranagar.",
+      "pricePerNight": 1800, "currency": "INR", "maxGuests": 2, "bedrooms": 0, "bathrooms": 1,
+      "attributes": { "areaSqm": "28", "hasSofaBed": "true" } } },
+
+    { "key": "london-flat", "host": "daniel", "listing": {
+      "type": "APARTMENT", "title": "Canal-side flat", "city": "London", "country": "United Kingdom",
+      "description": "A one-bedroom flat by the canal, with narrowboats outside the window and the Tube five minutes away.",
+      "pricePerNight": 95, "currency": "GBP", "maxGuests": 2, "bedrooms": 1, "bathrooms": 1,
+      "attributes": { "floorNumber": "2" } } },
+
+    { "key": "london-studio", "host": "daniel", "listing": {
+      "type": "STUDIO", "title": "Covent Garden studio", "city": "London", "country": "United Kingdom",
+      "description": "A neat studio in the middle of theatreland, for anyone who wants to walk everywhere.",
+      "pricePerNight": 120, "currency": "GBP", "maxGuests": 2, "bedrooms": 0, "bathrooms": 1,
+      "attributes": { "areaSqm": "25", "hasSofaBed": "false" } } },
+
+    { "key": "keswick-cabin", "host": "daniel", "listing": {
+      "type": "CABIN", "title": "Lakeside stone cabin", "city": "Keswick", "country": "United Kingdom",
+      "description": "A stone cabin on the edge of Derwentwater, with fell walks from the door and a pub within reach. Cosy, remote and quiet.",
+      "pricePerNight": 140, "currency": "GBP", "maxGuests": 4, "bedrooms": 2, "bathrooms": 1,
+      "attributes": { "heatingType": "GAS", "distanceToTownKm": "3" } } },
+
+    { "key": "brooklyn-loft", "host": "daniel", "listing": {
+      "type": "APARTMENT", "title": "Brooklyn loft", "city": "New York", "country": "United States",
+      "description": "A converted warehouse loft with big windows and exposed brick, near the bridge and the subway.",
+      "pricePerNight": 180, "currency": "USD", "maxGuests": 3, "bedrooms": 1, "bathrooms": 1,
+      "attributes": { "floorNumber": "4" } } },
+
+    { "key": "dubai-studio", "host": "layla", "listing": {
+      "type": "STUDIO", "title": "Marina studio", "city": "Dubai", "country": "United Arab Emirates",
+      "description": "A studio with a sea view, a short walk from the marina promenade and the tram.",
+      "pricePerNight": 300, "currency": "AED", "maxGuests": 2, "bedrooms": 0, "bathrooms": 1,
+      "attributes": { "areaSqm": "32", "hasSofaBed": "true" } } },
+
+    { "key": "dubai-villa", "host": "layla", "listing": {
+      "type": "VILLA", "title": "Palm villa with private pool", "city": "Dubai", "country": "United Arab Emirates",
+      "description": "A family villa on the Palm with its own pool and a private beach, made for long lazy days with children.",
+      "pricePerNight": 2400, "currency": "AED", "maxGuests": 8, "bedrooms": 4, "bathrooms": 4,
+      "attributes": { "plotAreaSqm": "800", "hasPool": "true" } } },
+
+    { "key": "dubai-tower", "host": "layla", "listing": {
+      "type": "APARTMENT", "title": "High-floor city apartment", "city": "Dubai", "country": "United Arab Emirates",
+      "description": "Thirty-two floors up, with the skyline through floor-to-ceiling windows and the metro at the door.",
+      "pricePerNight": 650, "currency": "AED", "maxGuests": 4, "bedrooms": 2, "bathrooms": 2,
+      "attributes": { "floorNumber": "32", "hasElevator": "true" } } },
+
+    { "key": "seville-villa", "host": "carmen", "listing": {
+      "type": "VILLA", "title": "Olive grove villa", "city": "Seville", "country": "Spain",
+      "description": "A whitewashed villa among the olive trees, with a pool and long quiet evenings, twenty minutes from the old town.",
+      "pricePerNight": 280, "currency": "EUR", "maxGuests": 6, "bedrooms": 3, "bathrooms": 2,
+      "attributes": { "plotAreaSqm": "1200", "hasPool": "true" } } },
+
+    { "key": "barcelona-flat", "host": "carmen", "listing": {
+      "type": "APARTMENT", "title": "Old town flat", "city": "Barcelona", "country": "Spain",
+      "description": "A flat with a balcony over a narrow street in the Gothic Quarter, close to the tapas bars and the cathedral.",
+      "pricePerNight": 130, "currency": "EUR", "maxGuests": 3, "bedrooms": 1, "bathrooms": 1,
+      "attributes": { "floorNumber": "1" } } },
+
+    { "key": "valencia-studio", "host": "carmen", "listing": {
+      "type": "STUDIO", "title": "Beach studio", "city": "Valencia", "country": "Spain",
+      "description": "A bright studio two streets from the beach, with bikes to borrow for the ride along the seafront.",
+      "pricePerNight": 85, "currency": "EUR", "maxGuests": 2, "bedrooms": 0, "bathrooms": 1,
+      "attributes": { "areaSqm": "30", "hasSofaBed": "false" } } }
+  ],
+
+  "stays": [
+    { "guest": "ravi",  "listing": "goa-villa",      "startsInDays": -60, "nights": 3, "guests": 2,
+      "review": { "rating": 5, "comment": "Exactly as quiet as promised. We spent every afternoon in the hammocks." } },
+    { "guest": "meera", "listing": "goa-villa",      "startsInDays": -30, "nights": 2, "guests": 4,
+      "review": { "rating": 4, "comment": "बगीचा बहुत सुंदर था, और समुद्र तट तक पैदल जाना आसान है।" } },
+    { "guest": "sofia", "listing": "seville-villa",  "startsInDays": -45, "nights": 4, "guests": 2,
+      "review": { "rating": 5, "comment": "Un lugar precioso y muy tranquilo. Volveríamos sin dudarlo." } },
+    { "guest": "arjun", "listing": "manali-cabin",   "startsInDays": -20, "nights": 3, "guests": 3,
+      "review": { "rating": 5, "comment": "Woke up to the snow line every morning. The wood stove kept us warm all night." } },
+    { "guest": "ravi",  "listing": "london-flat",    "startsInDays": -90, "nights": 2, "guests": 2,
+      "review": { "rating": 4, "comment": "Handy for the Tube and lovely by the canal, if a little small." } },
+    { "guest": "meera", "listing": "dubai-studio",   "startsInDays": -15, "nights": 2, "guests": 2,
+      "review": { "rating": 3, "comment": "Great view of the marina, but noisy late at night." } },
+    { "guest": "sofia", "listing": "barcelona-flat", "startsInDays": -25, "nights": 3, "guests": 2,
+      "review": { "rating": 4, "comment": "Muy bien situado y con mucho encanto. La cama podría ser mejor." } },
+    { "guest": "arjun", "listing": "chennai-flat",   "startsInDays": -10, "nights": 2, "guests": 2,
+      "review": { "rating": 4, "comment": "Clean, bright and close to the beach road." } },
+    { "guest": "arjun", "listing": "goa-flat",       "startsInDays": -50, "nights": 2, "guests": 2 },
+
+    { "guest": "ravi",  "listing": "manali-cabin",   "startsInDays": 14, "nights": 3, "guests": 2 },
+    { "guest": "meera", "listing": "dubai-villa",    "startsInDays": 30, "nights": 4, "guests": 6 },
+    { "guest": "sofia", "listing": "goa-flat",       "startsInDays": 21, "nights": 2, "guests": 2 },
+    { "guest": "arjun", "listing": "keswick-cabin",  "startsInDays": 45, "nights": 3, "guests": 3 }
+  ],
+
+  "favourites": [
+    { "user": "ravi",  "listing": "manali-cabin" },
+    { "user": "ravi",  "listing": "munnar-cabin" },
+    { "user": "ravi",  "listing": "keswick-cabin" },
+    { "user": "meera", "listing": "dubai-villa" },
+    { "user": "meera", "listing": "seville-villa" },
+    { "user": "sofia", "listing": "barcelona-flat" },
+    { "user": "sofia", "listing": "valencia-studio" },
+    { "user": "arjun", "listing": "goa-villa" }
+  ]
+}
