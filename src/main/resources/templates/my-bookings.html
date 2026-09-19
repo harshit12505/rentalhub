@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(#{bookings.title}, ~{::main})}">
+<body>
+<main class="container py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+        <h1 class="h3 mb-0" th:text="#{bookings.title}">My bookings</h1>
+        <form th:if="${bookings != null}" method="get" th:action="@{/bookings}" class="d-flex gap-2">
+            <label class="visually-hidden" for="show-in" th:text="#{detail.showIn}">Show prices in</label>
+            <select class="form-select form-select-sm" id="show-in" name="currency">
+                <option value="" th:text="#{detail.showIn}">Show prices in…</option>
+                <option th:each="c : ${currencies}" th:value="${c}" th:text="${c}" th:selected="${c == currency}">USD</option>
+            </select>
+            <button type="submit" class="btn btn-sm btn-outline-secondary" th:text="#{detail.show}">Show</button>
+        </form>
+    </div>
+
+    <p th:if="${bookings == null}" class="alert alert-info" th:text="#{bookings.signIn}">Sign in to see your bookings.</p>
+    <p th:if="${bookings != null and #lists.isEmpty(bookings)}" class="lead" th:text="#{bookings.none}">No bookings yet.</p>
+
+    <div class="list-group" th:if="${bookings != null}">
+        <div class="list-group-item" th:each="b : ${bookings}">
+            <div class="d-flex flex-wrap justify-content-between gap-2">
+                <div>
+                    <a class="fw-semibold" th:href="@{/listings/{id}(id=${b.property.id})}" th:text="${b.property.title}">Quiet garden house</a>
+                    <span class="text-body-secondary" th:text="|· ${b.property.city}|">· Goa</span>
+                    <div class="small">
+                        <span th:text="#{bookings.dates(${#temporals.format(b.checkIn, 'd MMM yyyy')}, ${#temporals.format(b.checkOut, 'd MMM yyyy')})}">10 Mar 2027 to 13 Mar 2027</span>
+                        · <span th:text="#{bookings.nights(${b.nights})}">3 nights</span>
+                        · <span th:text="#{bookings.guests(${b.guests})}">2 guests</span>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <div class="fw-semibold" th:text="${@money.format(b.totalAmount, b.currency)}">27,000.00 INR</div>
+                    <div class="small text-body-secondary" th:if="${b.displayTotal}" th:text="|≈ ${@money.format(b.displayTotal)}|">≈ 281.36 USD</div>
+                    <span class="badge" th:classappend="${b.status.name() == 'CONFIRMED'} ? 'text-bg-success' : 'text-bg-secondary'"
+                          th:text="#{bookings.status.__${b.status}__}">Confirmed</span>
+                    <span class="badge text-bg-light border" th:text="#{payment.status.__${b.payment.status}__}">Paid</span>
+                </div>
+            </div>
+            <form th:if="${b.status.name() == 'CONFIRMED'}" method="post"
+                  th:action="@{/bookings/{id}/cancel(id=${b.id})}" class="mt-2">
+                <button type="submit" class="btn btn-sm btn-outline-danger" th:text="#{bookings.cancel}">Cancel booking</button>
+                <span class="small text-body-secondary ms-2" th:text="#{bookings.cancelHint}">A paid booking is refunded in full.</span>
+            </form>
+        </div>
+    </div>
+</main>
+</body>
+</html>

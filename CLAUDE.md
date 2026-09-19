@@ -135,8 +135,24 @@ server in tests. Its exceptions are checked (`StripeException`).
   `OpenApiDocumentationTest` and `PostmanCollectionTest` fail the build otherwise.
 - Removal after a change uses the *immediate* cache methods (`evictIfPresent`, `invalidate`,
   the Redis writer's `invalidate`), never `evict`/`clear`, which may be deferred.
-- REST: the acting user is the `X-Demo-User-Id` header (`ApiHeaders.DEMO_USER_ID`) until
-  phase 8's session switcher. Controllers are thin; rules live in services.
+- The acting user: REST and GraphQL take the `X-Demo-User-Id` header (`ApiHeaders.DEMO_USER_ID`);
+  the pages take the session (`web/DemoSession`, set by the navbar's "sign in as"). Either one
+  becomes the audit actor (`RequestIdFilter`). Controllers are thin; rules live in services.
+- Pages (phase 8): controllers in `web/mvc/` call the same services as REST. Every POST ends in
+  a redirect, refused forms too: `FormErrors.reject` puts a service's refusal beside its field,
+  `FormErrors.keepForNextPage` flashes the form and its `BindingResult`, `PageNotices` the
+  one-line notice. The layout's model (`currentUser`, `demoUsers`, `currentPath`,
+  `languageLinks`) comes from `PageModelAdvice`; error pages add it themselves
+  (`PageExceptionHandler`, `PageErrorViewResolver` for Boot's own errors). All text is `#{key}`:
+  `MessagesFilesTest` checks the templates' keys (enum-built ones too) and page tests fail on
+  `??`. No template or script may name a property type or attribute (`PropertyFactoryTest`):
+  type fields come from `AttributeSpec`s. Links are relative (`@{…}`; the page's own address is
+  `PageModelAdvice.pagePath`). Money via `${@money.format(…)}`; dates bound ISO. The home template
+  is `home.html` — an `index.html` makes Boot add a "welcome page" that renders it without data.
+  Session cookie: cookie-only tracking, HttpOnly, SameSite=Lax (no CSRF tokens: no Spring
+  Security). `server.tomcat.max-swallow-size` stays above any photo, or a browser gets
+  "connection reset" instead of the too-large message. Bootstrap 5.3.8 from jsDelivr with SRI
+  hashes; a new CDN file needs its `integrity` hash too.
 - Retry wraps the transaction from the outside: each attempt is a fresh transaction, in a
   separate bean (a call to `this` skips the `@Transactional` proxy). Retry only
   `ConcurrencyFailureException` (lost version race, deadlock victim), never business refusals.
@@ -215,14 +231,18 @@ ai/            AiAvailability, AiSettings, AiEnvironmentPostProcessor (no key �
                EmbeddingIndexStore, ListingEmbeddingService, ListingIndexUpdater,
                ParsedQuery + QueryParser (rules), PreferenceProfile(+Service),
                HybridRetriever, RecommendationService, StatsService
-web/           RequestIdFilter (request id + user in the MDC, audit actor),
-               LanguageParameterFilter (?lang=); rest/ (+ ApiExamples), graphql/ (controllers,
-               GraphQlScalars, DemoUserInterceptor, GraphQlErrorResolver), mvc/ controllers
-dto/, exception/ (GlobalExceptionHandler, ApiRoutingErrorHandler), scheduling/
+web/           RequestIdFilter (request id + user in the MDC, audit actor), DemoSession
+               (signed-in demo user), LanguageParameterFilter (?lang=); rest/ (+ ApiExamples),
+               graphql/ (controllers, GraphQlScalars, DemoUserInterceptor, GraphQlErrorResolver),
+               mvc/ (page controllers: Home, ListingPage, HostListing, BookingPage,
+               RecommendationPage, Session; PageModelAdvice, PageNotices, FormErrors,
+               MoneyFormat, PageExceptionHandler, PageErrorViewResolver)
+dto/ (+ DemoUser, RatingSummary), exception/ (GlobalExceptionHandler, ApiRoutingErrorHandler), scheduling/
                (StaleListingJob, PaymentReconciliationJob, EmbeddingIndexJob), bootstrap/
                (DemoDataSeeder)
 resources/     application.yml (+ -local, -render), db/migration/, messages*.properties,
-               graphql/schema.graphqls, templates/, static/css/app.css
+               graphql/schema.graphqls, templates/ (layout + fragments/, one per page,
+               error.html), static/css/app.css, static/js/listing-form.js
 docs/learning/ one teaching doc per phase
 postman/       the collection (every endpoint) and the local environment
 samples/api/   request bodies, sample photos and GraphQL documents for trying the API by hand
@@ -257,7 +277,7 @@ One phase at a time, in order. Never scaffold a later phase early. After each ph
 | 5 | Payments: Stripe, BigDecimal math, multi-currency display | done |
 | 6 | AI / RAG: embeddings, preference profile, hybrid search, stats mode (+ favourites) | done |
 | 7 | Extra mile: S3, i18n, GraphQL, OpenAPI, Postman | done |
-| 8 | Frontend: Thymeleaf pages | — |
+| 8 | Frontend: Thymeleaf pages | done |
 | 9 | Ship: seeder, Dockerfile, render.yaml, README, deploy guide | — |
 
 ## Commands
@@ -332,3 +352,10 @@ docker exec -it rentalhub-redis redis-cli --scan --pattern "rentalhub:*"   # cac
 - 2026-09-19 — GraphQL shares the REST services; money as a string `Decimal` scalar; `@BatchMapping` for hosts/photos; a `cancelBooking` mutation; custom CONFLICT/PAYMENT_FAILED/UNAVAILABLE classifications — Float is a double; N+1 proven away by a statement-count test.
 - 2026-09-19 — Tests fail when an endpoint lacks Swagger docs/examples or a Postman request — documentation that is not checked goes stale.
 - 2026-09-19 — Cache key prefix `rentalhub:v3:` — a listing's photos gained their id in the cached record.
+- 2026-09-19 — Pages: a two-parameter Thymeleaf fragment layout, Bootstrap from jsDelivr with SRI, one small script with a no-JavaScript fallback — no layout library, no build step.
+- 2026-09-19 — "Sign in as" = user id in the session; new session id on every switch; `returnTo` only a local path; cookie-only, HttpOnly, SameSite=Lax; no CSRF tokens — no Spring Security by the spec; fixation and open redirect are the classic holes.
+- 2026-09-19 — Every POST redirects, refused forms included (form + BindingResult flashed) — a reload never re-posts; the address bar always answers GET (language and sign-in links hit a 405 otherwise).
+- 2026-09-19 — The page's booking form validates after setting the listing id from the address — `BookingRequest` is shared with the API and requires it.
+- 2026-09-19 — "List a place" generated from `AttributeSpec`s; a test fails if a template names a type — the new-type rule holds for pages.
+- 2026-09-19 — Paying on the page = a select of Stripe test payment methods, no card field — card numbers never reach the server.
+- 2026-09-19 — Boot's own error page drawn with the site's template and navbar; `home.html` not `index.html`; `max-swallow-size` 50 MB; relative links — found by hand in a browser.

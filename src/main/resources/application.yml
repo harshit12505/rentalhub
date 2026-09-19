@@ -99,6 +99,12 @@ spring:
     graphiql:
       enabled: true
 
+  mvc:
+    format:
+      # Dates in forms the ISO way (2027-03-10), whatever the page's language: that is what a
+      # browser's <input type="date"> sends and expects back.
+      date: iso
+
   servlet:
     multipart:
       # Photos only: 5 MB each (rentalhub.images.max-size checks the same), plus room for
@@ -113,6 +119,27 @@ spring:
 server:
   # Render assigns the port through the PORT environment variable.
   port: ${PORT:8080}
+  servlet:
+    session:
+      # The pages' "signed in as" lives in the session. SameSite=Lax: the browser sends the
+      # cookie when someone follows a link here, but not with a form another site posts here,
+      # so a stranger's page cannot book or cancel as the signed-in user (there is no CSRF
+      # token: no Spring Security, by the spec). HttpOnly: page scripts cannot read it.
+      cookie:
+        same-site: lax
+        http-only: true
+      timeout: 2h
+      # Only ever in the cookie. Otherwise Tomcat writes it into the URL (/;jsessionid=...) on the
+      # first redirect, before it knows the browser keeps cookies: a session id in an address
+      # leaks through logs, bookmarks and the Referer header.
+      tracking-modes: cookie
+  tomcat:
+    # A photo over the limit is refused from its size alone, before its bytes are read. Tomcat
+    # then reads and throws away the rest of the upload, up to this much, so that the browser gets
+    # the answer (the listing again, with the reason); past it, Tomcat closes the connection and
+    # the browser shows its own "connection reset" page. The default, 2 MB, is less than one
+    # phone photo.
+    max-swallow-size: 50MB
 
 # The OpenAPI description (/v3/api-docs) and Swagger UI (/swagger-ui.html): the API's own
 # paths only, not Spring's (the actuator, the GraphQL endpoint).

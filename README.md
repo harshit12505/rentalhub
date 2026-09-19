@@ -24,12 +24,12 @@ One deployable Spring Boot application. No separate frontend build, no npm, no s
 | 5 | Payments (Stripe test mode, or a built-in simulator), refunds, BigDecimal money maths, prices in other currencies | ✅ |
 | 6 | AI: listings indexed as vectors (pgvector), hybrid search, a preference profile, grounded answers from Gemini, favourites | ✅ |
 | 7 | Listing photos on S3, English/Hindi/Spanish, GraphQL, OpenAPI (Swagger UI), Postman collection | ✅ |
-| 8–9 | Frontend, deploy | not started |
+| 8 | Web pages (Thymeleaf + Bootstrap): search, listing, booking and payment, My bookings, list a place, ask for ideas, "sign in as" | ✅ |
+| 9 | Demo data, Docker image, deploy to Render | not started |
 
-The app has a REST API for listings (with photos), bookings (with payments), reviews,
-favourites and recommendations (see [Trying the API](#trying-the-api-powershell)), a GraphQL
-API, and no web pages yet. The startup warning `Cannot find template location: classpath:/templates/` is
-expected until pages arrive in phase 8.
+The app is a website (see [Using the website](#using-the-website)) with a REST API behind it
+for listings (with photos), bookings (with payments), reviews, favourites and recommendations
+(see [Trying the API](#trying-the-api-powershell)), plus a GraphQL API.
 
 ---
 
@@ -99,6 +99,26 @@ docker compose up -d
 | A photo upload answers 503 `image.storage.notConfigured` | No `S3_BUCKET` set: uploads are switched off | Set the S3 variables, or use MinIO (`docker compose --profile photos up -d`) |
 | A photo upload answers 503 `image.storage.unavailable` | The bucket is missing, or the credentials are wrong | Check the bucket exists and the keys match; the log line `image.upload.failed` has the reason |
 | `ai.listing.embedFailed` or `ai.search.failed` in the log | The key is wrong, revoked, or the free tier's rate limit was hit | Listings and answers keep working; the index job retries every two minutes |
+| The pages have no styling | Bootstrap comes from a CDN, and the machine is offline | Connect; everything works without it, just unstyled |
+| Signed out after restarting the app | Sessions are kept in the app's memory | Pick the user again under **Sign in as** |
+
+---
+
+## Using the website
+
+Open `http://localhost:8080` (or `8081` — see Common problems). There is no login: pick a demo
+user from **Sign in as** in the navbar. Demo data arrives in Phase 9; until then, create users
+and listings as in the [hands-on guide, Part 63](docs/learning/hands-on-guide.md).
+
+| Page | What it does |
+|---|---|
+| `/` | Search by city, guests, a price ceiling and a currency; listing cards, 12 a page |
+| `/listings/{id}` | Photos, details, reviews; book and pay with Stripe's test cards; save to favourites; for its host, add or remove photos |
+| `/bookings` | Your bookings, totals in another currency, cancel with a full refund |
+| `/host/listings/new` | Hosts list a place; each property type's own fields appear when it is chosen |
+| `/recommendations` | Ask for a stay in plain words; the answer and the listings it is about |
+
+The navbar's **Language** menu switches every page between English, हिन्दी and Español.
 
 ---
 
@@ -243,6 +263,7 @@ those dates are now taken.
 4. Add a Flyway migration for the new columns.
 5. Add translated labels (`property.type.X`, `property.attribute.*`) to the messages files.
 
-No controller, service, form, view or existing creator changes. `PropertyFactoryTest`
-fails if the entity, creator and labels disagree; the app refuses to start if a type has
-no creator.
+No controller, service, form, view or existing creator changes: the "list a place" form and
+the listing page build the type's fields from its `AttributeSpec`s. `PropertyFactoryTest`
+fails if the entity, creator and labels disagree, or if a page template names a type; the app
+refuses to start if a type has no creator.

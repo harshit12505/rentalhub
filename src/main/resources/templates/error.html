@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<!--/* The error page, for the pages (the API answers in JSON instead). Used both by
+       PageExceptionHandler, which passes a translated message, and by Spring Boot itself for a
+       page that does not exist, which passes only the status. */-->
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout :: page(${#messages.msgOrNull('error.title.' + status)} ?: #{error.title.500}, ~{::main})}">
+<body>
+<main class="container py-5">
+    <p class="display-6 text-body-secondary" th:text="${status}">404</p>
+    <h1 class="h3" th:text="${#messages.msgOrNull('error.title.' + status)} ?: #{error.title.500}">Not found</h1>
+    <p class="lead" th:text="${message != null and !#strings.isEmpty(message)} ? ${message} : #{error.page.generic}">
+        That page does not exist.</p>
+    <a class="btn btn-primary" th:href="@{/}" th:text="#{error.page.back}">Back to the start</a>
+</main>
+</body>
+</html>

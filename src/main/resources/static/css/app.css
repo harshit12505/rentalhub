@@ -1,0 +1,61 @@
+/* RentalHub's own styles, on top of Bootstrap 5. Deliberately small: layout and colour come
+   from Bootstrap's classes in the templates; this only covers what Bootstrap has no class for. */
+
+/* Listing photos keep one shape, whatever was uploaded, and are cropped rather than stretched. */
+.listing-photo {
+    aspect-ratio: 3 / 2;
+    object-fit: cover;
+}
+
+.listing-gallery {
+    aspect-ratio: 16 / 9;
+    max-height: 28rem;
+    object-fit: cover;
+}
+
+/* No photo yet: a quiet panel of the same shape, so the grid does not jump. */
+.listing-photo-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--bs-secondary-bg), var(--bs-tertiary-bg));
+    color: var(--bs-secondary-color);
+    font-size: 0.875rem;
+}
+
+.listing-gallery.listing-photo-empty {
+    min-height: 12rem;
+}
+
+.listing-card .card-title a:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 2px;
+}
+
+/* A host's photo list: small squares with a remove button under each. */
+.photo-thumb {
+    width: 8rem;
+}
+
+.photo-thumb img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+}
+
+/* The listing's description keeps the host's line breaks. */
+.listing-description {
+    white-space: pre-line;
+}
+
+/* The booking card stays in view beside a long listing on wide screens. */
+@media (min-width: 992px) {
+    .booking-card {
+        position: sticky;
+        top: 1rem;
+    }
+}
+
+.answer {
+    background: var(--bs-tertiary-bg);
+}

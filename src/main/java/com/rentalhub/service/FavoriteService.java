@@ -90,6 +90,12 @@ public class FavoriteService {
                 .log();
     }
 
+    /** Has this user saved this listing? What the favourite button on a listing's page shows. */
+    @Transactional(readOnly = true)
+    public boolean isSaved(long propertyId, long userId) {
+        return favorites.existsByUserIdAndPropertyId(userId, propertyId);
+    }
+
     /**
      * A user's saved listings, newest first.
      *

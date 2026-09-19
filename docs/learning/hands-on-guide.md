@@ -1,20 +1,24 @@
 # Hands-on guide: test RentalHub yourself
 
-Everything built so far (Phases 1–7), tested by you, step by step. Each step has the
+Everything built so far (Phases 1–8), tested by you, step by step. Each step has the
 exact PowerShell command and what you should see. Every command and expected output here
 was run and checked against a fresh database: Parts 0–17 on 13 Sep 2026, Parts 18–26 on
 14 Sep 2026, Parts 28–34 on 15 Sep 2026, Parts 36–44 on 16 Sep 2026, Parts 46–50 on
-18 Sep 2026, and Parts 53–61 on 18–19 Sep 2026. Phase 5 changed what some earlier parts
+18 Sep 2026, Parts 53–61 on 18–19 Sep 2026, and Parts 63–70 on 19 Sep 2026. Phase 5 changed what some earlier parts
 print (bookings are now paid for, cache keys gained a currency), so those parts were run
 again on 16 Sep 2026 and updated. Phase 7 changed two things earlier parts show: Spring's
 own error messages are now the app's (Part 9, rows 8 and 11; Part 21, row 8), and the
 cache keys start `rentalhub:v3:` (a listing's photos gained an id); both were checked and
 updated on 19 Sep 2026. Part 51 is the one exception: it needs a Gemini key, so it says
-what to expect rather than what was seen.
+what to expect rather than what was seen. In Parts 63–70 the outputs are the real ones, but three
+steps were checked another way than the one written: the forms were submitted by script in the
+browser, the cookie flags read from the response rather than in DevTools, and the MinIO upload
+(Part 69, step 3) posted with curl to the same form address. Part 68, step 6 (JavaScript
+switched off) was checked by a test of the address it loads, not in a browser.
 
 **Time:** about 45 minutes for Parts 0–17 (Phases 1–2), 30 more for Parts 18–26
 (Phase 3), 30 more for Parts 28–34 (Phase 4), 30 more for Parts 36–44 (Phase 5),
-25 more for Parts 46–52 (Phase 6), and 40 more for Parts 53–62 (Phase 7).
+25 more for Parts 46–52 (Phase 6), 40 more for Parts 53–62 (Phase 7), and 40 more for Parts 63–70 (Phase 8).
 **You'll use three PowerShell windows:**
 
 | Window | Used for |
@@ -92,7 +96,8 @@ $env:PORT = "8081"
 ```
 
 ✅ After ~10 seconds: `Started RentalHubApplication in … seconds`.
-A `WARN … Cannot find template location` line is expected (web pages arrive in Phase 8).
+(Before Phase 8 a `WARN … Cannot find template location` line appeared here too; the web
+pages removed it.)
 **Leave this window running.** Its log is part of the test: watch it.
 
 ---
@@ -2677,6 +2682,301 @@ ended), and the review itself a 403; their descriptions say so.
 
 ---
 
+# Phase 8 — The web pages (Parts 63–70)
+
+Until now everything went through `curl.exe`. This phase is the website, so most of it happens
+in a browser (Chrome or Edge) at **http://localhost:8081**. Window 2 is still used for a few
+commands. There is no login: the navbar's **Sign in as** menu picks a demo user.
+
+**Signed out after a restart?** Sessions live in the app's memory, so restarting the app signs
+everyone out. Just sign in again from the navbar.
+
+## Part 63 — A fresh start: three users, five listings
+
+1. `Ctrl+C` in Window 1. If you set the storage variables in Part 56, clear them (they come back
+   in Part 69):
+
+   ```powershell
+   Remove-Item Env:S3_BUCKET, Env:S3_ENDPOINT, Env:S3_PATH_STYLE, Env:AWS_REGION, Env:AWS_ACCESS_KEY_ID, Env:AWS_SECRET_ACCESS_KEY
+   ```
+
+2. In Window 2:
+
+   ```powershell
+   docker compose down -v
+   ```
+
+   ```powershell
+   docker compose up -d
+   ```
+
+3. In Window 1:
+
+   ```powershell
+   .\mvnw.cmd spring-boot:run
+   ```
+
+4. In Window 2, three users (one host, two guests):
+
+   ```powershell
+   docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "INSERT INTO users (full_name, email, role) VALUES ('Asha Menon','asha@example.com','HOST'), ('Ravi Kumar','ravi@example.com','GUEST'), ('Meera Iyer','meera@example.com','GUEST') RETURNING id, full_name, role;"
+   ```
+
+   ✅
+   ```
+    id | full_name  | role
+   ----+------------+-------
+     1 | Asha Menon | HOST
+     2 | Ravi Kumar | GUEST
+     3 | Meera Iyer | GUEST
+   ```
+
+5. And Asha's five listings, one command:
+
+   ```powershell
+   foreach ($f in "villa-quiet-garden","apartment","cabin-snow-view","studio","apartment-nightlife") { curl.exe -s -o NUL -w "$f %{http_code}`n" -X POST http://localhost:8081/api/properties -H "Content-Type: application/json" -H "X-Demo-User-Id: 1" --data "@samples/api/$f.json" }
+   ```
+
+   ✅
+   ```
+   villa-quiet-garden 201
+   apartment 201
+   cabin-snow-view 201
+   studio 201
+   apartment-nightlife 201
+   ```
+
+   Listing 1 is the Quiet garden villa in Goa, listing 2 the Marina view apartment in Chennai.
+
+---
+
+## Part 64 — The home page
+
+Open **http://localhost:8081**.
+
+✅ "Find a place to stay", a search form, **5 place(s) found**, and five cards. Each has a grey
+"No photo yet" panel, the type and city, a price such as **9,000.00 INR a night**, and
+"No reviews yet · Sleeps 6".
+
+Now search: **City** `Goa`, **Currency** `USD`, **Max price a night** `100`, then **Search**.
+
+✅ **2 place(s) found**: the Nightlife flat and the Quiet garden villa. Each shows its own price
+and, under it, a converted one such as **≈ 93.76 USD** (the rate changes daily). The address
+bar now holds the filters (`/?city=Goa&currency=USD&maxPrice=100`), so the search can be
+bookmarked or shared.
+
+Two things to look at:
+- **Make the window narrow** (or press `F12` → the phone icon, *Toggle device toolbar*). The
+  cards stack into one column, the navbar folds into a ☰ button, and nothing scrolls sideways.
+- **View the page source** (`Ctrl+U`). The Bootstrap `<link>` carries an `integrity="sha384-…"`
+  attribute: the browser checks the downloaded file against that hash (Subresource Integrity).
+
+---
+
+## Part 65 — "Sign in as"
+
+1. Navbar → **Sign in as** → **Ravi Kumar**.
+
+   ✅ You're back on the same search, with a green **You are now acting as Ravi Kumar.**, and
+   the navbar says **Signed in as Ravi Kumar**. The address is exactly what it was, with no
+   `;jsessionid=…` in it.
+
+2. Press `F5`. ✅ The green message is gone: a *flash* message lives for one page only.
+
+3. `F12` → **Application** → **Cookies** → `http://localhost:8081`. ✅ One cookie, `JSESSIONID`,
+   with **HttpOnly** ticked and **SameSite** `Lax`.
+
+4. The same from the command line, in Window 2:
+
+   ```powershell
+   curl.exe -s -i -X POST http://localhost:8081/session/user -d "userId=2&returnTo=/bookings" | Select-String "HTTP/|Set-Cookie|Location"
+   ```
+
+   ✅ (your session id will differ)
+   ```
+   HTTP/1.1 302
+   Set-Cookie: JSESSIONID=C6749A60DE9F5D465DD543B17491B95D; Path=/; HttpOnly; SameSite=Lax
+   Location: http://localhost:8081/bookings
+   ```
+
+5. The open-redirect guard: ask to be sent to another site afterwards.
+
+   ```powershell
+   curl.exe -s -i -X POST http://localhost:8081/session/user -d "userId=2&returnTo=//evil.example" | Select-String "Location"
+   ```
+
+   ✅ `Location: http://localhost:8081/` — the home page, not `evil.example`.
+
+---
+
+## Part 66 — Book a stay, in two languages
+
+1. In the browser (still Ravi), open the **Quiet garden villa**.
+
+   ✅ Its details include its own fields, **Plot area (m²) 500** and **Private pool Yes**. On the
+   right: the price, and **Book your stay** with dates a week from today, 1 guest, and **Pay
+   with** offering three Stripe test cards.
+
+2. Set **Check-out** to the same day as **Check-in**, **Guests** to `2`, and press **Book and
+   pay**.
+
+   ✅ The address is `/listings/1#book` (the listing's own address, not the form's). Under
+   Check-out, in red: **Check-out must be at least one day after check-in.** The dates you
+   typed are still there.
+
+3. Navbar → **Language** → **Español**.
+
+   ✅ The same page in Spanish: **Reserva tu estancia**, **Superficie de la parcela (m²)**,
+   **Piscina privada: Sí**, and the price as **9.000,00 INR** (Spanish groups thousands with a
+   dot).
+
+4. Set **Salida** two days after **Llegada**, **Huéspedes** `2`, and press **Reservar y pagar**.
+
+   ✅ **Mis reservas**, with a green **Reservado: 2 noche(s), 18.000,00 INR pagados.** and the
+   booking marked **Confirmada** and **Pagada**.
+
+5. Who made it? In Window 2:
+
+   ```powershell
+   docker exec rentalhub-postgres psql -U rentalhub -d rentalhub -c "SELECT b.id, b.status, b.payment_status, b.payment_provider, r.changed_by FROM bookings b JOIN bookings_aud a ON a.id = b.id JOIN revinfo r ON r.rev = a.rev ORDER BY a.rev;"
+   ```
+
+   ✅ Three history rows (held, payment started, paid), all by Ravi, as through the API:
+   ```
+    id |  status   | payment_status | payment_provider | changed_by
+   ----+-----------+----------------+------------------+------------
+     1 | CONFIRMED | PAID           | SIMULATED        | user:2
+     1 | CONFIRMED | PAID           | SIMULATED        | user:2
+     1 | CONFIRMED | PAID           | SIMULATED        | user:2
+   ```
+   (Each row is the booking's latest state joined to each revision; the history itself is in
+   `bookings_aud`, as in Part 30.)
+
+6. **Mostrar precios en…** → `USD` → **Mostrar**. ✅ Under the total: **≈ 187,52 USD**
+   (display only, never stored — Part 43).
+
+7. **Cancelar reserva**. ✅ **Reserva cancelada y reembolsada por completo.**, the booking
+   **Cancelada** and **Reembolsada**, and no cancel button any more.
+
+---
+
+## Part 67 — A declined card, a favourite, and ideas
+
+1. **Language** → **English**. Open the **Marina view apartment**. **Pay with** → **Test card
+   that is declined** → **Book and pay**.
+
+   ✅ Back at `/listings/2#book` with a red box: **The card was declined, and nothing was
+   charged. Please try a different card.** The declined card is still selected.
+
+2. Press **♡ Save** (top right of the listing). ✅ **Saved to your favourites.**, and the button
+   is now a filled **♥ Saved**. Press it again: **Removed from your favourites.** Press it once
+   more, so it stays saved.
+
+3. Navbar → **Ask for ideas**. Type `somewhere like my favourites in Goa` and press **Ask**.
+
+   ✅ A yellow notice first — **Search by meaning is switched off on this server (no Gemini
+   key)…** — then the answer, **Written by the app itself.**, and the two Goa listings as cards.
+
+4. In Hindi, straight from the address bar:
+
+   `http://localhost:8081/recommendations?q=how%20many%20listings%20have%20I%20saved&lang=hi`
+
+   ✅ **आपने 1 लिस्टिंग सहेजी हैं, ज़्यादातर Chennai में।** and **ऐप ने ख़ुद लिखा।** — the Phase 6
+   statistics, answered by SQL.
+
+---
+
+## Part 68 — List a place, as the host
+
+1. **Language** → **English**, then **Sign in as** → **Asha Menon**. ✅ A new navbar link, **List
+   a place** (only hosts see it). Open it.
+
+2. **Type of place** → **Cabin**. ✅ The apartment's fields disappear, and **Only for this type:
+   Cabin** shows **Heating** and **Distance to nearest town (km)**, both starred. Every type's
+   fields are on the page, generated from the factory; the chosen type's are shown and sent, the
+   others are hidden and disabled.
+
+3. Fill in: Title `Pine hut by the river`, Description `A small wooden hut, warm in winter.`,
+   City `Manali`, Country `India`, Price per night `5500`, Sleeps `3`, Bedrooms `1`,
+   Bathrooms `1`, Distance to nearest town `500`. Leave **Heating** on *Choose…*. Press
+   **Publish listing**.
+
+   ✅ **Heating is required for this type of property.** under Heating; everything you typed is
+   still there, and Cabin is still chosen.
+
+4. **Heating** → **Wood stove** → **Publish listing**. ✅ **Distance to town must be between 0 and
+   200 km.** under Distance.
+
+5. Distance `4.5` → **Publish listing**. ✅ The new listing's page (`/listings/6`): **Your listing
+   is live.**, its details include **Heating: Wood stove** and **Distance to nearest town (km):
+   4.5**, the booking card says **This is your listing.**, and a **Photos** section appears
+   (only for the host).
+
+6. *(Optional)* The form without JavaScript: `F12` → `Ctrl+Shift+P` → type **Disable
+   JavaScript** → Enter, then reload **List a place**. Choose **Cabin** and press the button that
+   appears, **Show the fields for this type**: the page reloads with the cabin's fields.
+   Re-enable JavaScript the same way (**Enable JavaScript**).
+
+7. **Sign in as** → **Ravi Kumar**, then open `http://localhost:8081/host/listings/new`. ✅ **Only
+   hosts can list a place…** and no form.
+
+---
+
+## Part 69 — Photos, from the page
+
+1. **Sign in as** → **Asha Menon**, open `http://localhost:8081/listings/6`, scroll to
+   **Photos**, **Choose file** → `C:\dev\rentalhub\samples\api\photo.jpg` → **Upload**.
+
+   ✅ Back at the Photos section with a red **Photo uploads are switched off, because no image
+   storage is configured on this server.** — the page's version of Part 55's 503.
+
+2. A file over the 5 MB limit. Make a 6 MB one in Window 2:
+
+   ```powershell
+   [IO.File]::WriteAllBytes("$env:TEMP\big.jpg", (New-Object byte[] 6291456))
+   ```
+
+   Upload `%TEMP%\big.jpg` (type `%TEMP%` in the file dialog's address bar). ✅ **The upload is
+   larger than this server accepts.**, on the listing, not a browser error page. (Without the
+   `max-swallow-size` setting, a browser shows "This site can't be reached — connection reset"
+   here: see the teaching doc.)
+
+3. With storage on: redo **Part 56** (MinIO, the bucket, the six variables, restart the app).
+   Sign in as Asha again (the restart forgot the session), and upload `photo.jpg` to listing 6.
+
+   ✅ **Photo added.**; the photo (a beach at sunset) is on the listing, and on its card on the
+   home page. In Window 2:
+
+   ```powershell
+   docker exec rentalhub-minio mc ls --recursive local/rentalhub-photos
+   ```
+
+   ✅ `7.3KiB STANDARD listings/6/….jpg`
+
+4. Under the photo, **Remove**. ✅ **Photo removed.**, the grey "No photo yet" panel is back, and
+   the same `mc ls` prints nothing.
+
+---
+
+## Part 70 — Error pages, then clean up
+
+Each of these is a page in the site's frame (navbar, language menu), never a stack trace:
+
+| Open | ✅ You see |
+|---|---|
+| `http://localhost:8081/listings/999?lang=hi` | **404**, **नहीं मिला**, **आईडी 999 वाली कोई लिस्टिंग नहीं है।** |
+| `http://localhost:8081/no-such-page?lang=es` | **404**, **No encontrado**, **Esa página no existe, o algo falló al mostrarla.**, and the navbar still knows who you are |
+| `http://localhost:8081/listings/abc?lang=en` | **400**, **The request was not valid**, **"abc" is not a valid value for id.** |
+| `http://localhost:8081/listings/1/book` | **405**, **Method not allowed** — that address only takes the booking form's POST |
+
+The second and fourth come from Spring Boot's own error handling (no controller answers those
+addresses); the first and third from the pages' own handler. Both render `error.html`.
+
+**Clean up:** `Ctrl+C` in Window 1. If you started MinIO:
+`docker compose --profile photos stop`, and clear the six variables as in Part 63, step 1.
+
+---
+
 ## What you just proved
 
 - [ ] All automated tests pass on your machine (see the project log for the current count)
@@ -2730,6 +3030,12 @@ ended), and the review itself a 403; their descriptions say so.
 - [ ] Removing a photo removes the row, then the file
 - [ ] GraphQL returns exactly the fields asked for, with money as an exact string, and translated errors
 - [ ] Every endpoint is in Swagger UI with an example, and the Postman collection runs top to bottom
+- [ ] The pages search, book, pay, cancel, save, ask and list a place through the same services and rules as the API
+- [ ] "Sign in as" gives a new session id; the cookie is HttpOnly and SameSite=Lax, never in the address; `returnTo` never leaves the site
+- [ ] A refused form comes back at the page's own address, each error beside its field, what you typed kept
+- [ ] The "list a place" form shows each type's own fields, generated from the factory, and works without JavaScript
+- [ ] Every page in English, Hindi and Spanish, prices and dates written the reader's way
+- [ ] 404, 400, 405 and a too-large photo are pages in the reader's language, never a stack trace
 
 ---
 
@@ -2771,7 +3077,11 @@ ended), and the review itself a 403; their descriptions say so.
 | Part 57: `images.mode storage=NONE` although you set S3_BUCKET | the variables were set in another window, or after starting | set them in Window 1, then start the app |
 | Part 58: the 6 MB upload hangs or the connection resets | an old curl | `curl.exe --version` should be 8.x (Windows 11 ships it) |
 | Part 61: Postman's upload says the file can't be found | Postman's working directory isn't the repository | *Settings → General → Working directory*: `C:\dev\rentalhub` |
-entalhub` |
+| Parts 64–70: the pages look like plain text, with no colours or layout | no internet: Bootstrap comes from a CDN | connect; everything still works, just unstyled |
+| Parts 65–70: suddenly "Sign in as" again, or a form says "Sign in first" | the app was restarted, and sessions live in its memory | sign in again from the navbar |
+| Part 66: the date boxes show `dd-mm-yyyy` or `mm/dd/yyyy` | the browser draws its date picker in your Windows language | expected; it sends `2026-09-26` to the app either way |
+| Part 69: the 6 MB upload shows "This site can't be reached" | the app was started before this phase's `application.yml` (`max-swallow-size`) | restart the app |
+| Part 69, step 3: the upload says storage is switched off | the six variables were set in another window, or after the app started | set them in Window 1, then start the app |
 
 **Tip:** to see a JSON response nicely indented, pipe it through PowerShell:
 `curl.exe -s http://localhost:8081/api/properties/1 | ConvertFrom-Json | ConvertTo-Json -Depth 5`

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(#{home.title}, ~{::main})}">
+<body>
+<main class="container py-4">
+    <h1 class="h3 mb-3" th:text="#{home.title}">Find a place to stay</h1>
+
+    <form class="row g-2 align-items-end mb-4" method="get" th:action="@{/}" role="search">
+        <div class="col-12 col-md-3">
+            <label class="form-label small" for="city" th:text="#{home.city}">City</label>
+            <input class="form-control" id="city" name="city" th:value="${city}" th:placeholder="#{home.cityHint}">
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label small" for="guests" th:text="#{home.guests}">Guests</label>
+            <input class="form-control" id="guests" name="guests" type="number" min="1" th:value="${guests}">
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label small" for="maxPrice" th:text="#{home.maxPrice}">Max price a night</label>
+            <input class="form-control" id="maxPrice" name="maxPrice" type="number" min="1" step="any" th:value="${maxPrice}">
+        </div>
+        <div class="col-8 col-md-2">
+            <label class="form-label small" for="currency" th:text="#{home.currency}">Currency</label>
+            <select class="form-select" id="currency" name="currency">
+                <option value="" th:text="#{home.anyCurrency}">INR, and each listing's own</option>
+                <option th:each="c : ${currencies}" th:value="${c}" th:text="${c}" th:selected="${c == currency}">USD</option>
+            </select>
+        </div>
+        <div class="col-4 col-md-2 d-grid">
+            <button class="btn btn-primary" type="submit" th:text="#{home.search}">Search</button>
+        </div>
+    </form>
+
+    <div th:if="${results.exchangeRatesUnavailable}" class="alert alert-warning" role="status"
+         th:text="#{home.ratesMissing}">Exchange rates are unavailable right now.</div>
+
+    <p class="text-body-secondary" th:text="#{home.results(${results.totalElements})}">3 places found</p>
+
+    <p th:if="${#lists.isEmpty(results.content)}" class="lead" th:text="#{home.none}">Nothing matches yet.</p>
+
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-4 g-4">
+        <div class="col" th:each="listing : ${results.content}">
+            <div th:replace="~{fragments/cards :: card(${listing}, ${ratings[listing.id]})}">card</div>
+        </div>
+    </div>
+
+    <nav class="d-flex justify-content-between align-items-center mt-4" th:if="${results.totalPages > 1}"
+         th:aria-label="#{page.navigation}">
+        <a class="btn btn-outline-secondary" th:classappend="${previousPage == null} ? 'disabled'"
+           th:href="${previousPage} ? @{${previousPage}} : '#'" rel="prev"
+           th:attr="aria-disabled=${previousPage == null} ? 'true' : null" th:text="#{page.previous}">Previous</a>
+        <span class="small text-body-secondary"
+              th:text="#{page.of(${results.page + 1}, ${results.totalPages})}">Page 1 of 3</span>
+        <a class="btn btn-outline-secondary" th:classappend="${nextPage == null} ? 'disabled'"
+           th:href="${nextPage} ? @{${nextPage}} : '#'" rel="next"
+           th:attr="aria-disabled=${nextPage == null} ? 'true' : null" th:text="#{page.next}">Next</a>
+    </nav>
+</main>
+</body>
+</html>

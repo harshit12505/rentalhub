@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!--/* The shared page frame. Every page replaces itself with this fragment: page(its title, its main element),
+       and supplies only its <main>; this adds the head, the navbar, the notice from the last
+       form, and the footer. A plain Thymeleaf fragment with two parameters: no layout library. */-->
+<html xmlns:th="http://www.thymeleaf.org" th:fragment="page(title, content)" th:lang="${#locale.language}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="|${title} · RentalHub|">RentalHub</title>
+    <!-- Bootstrap from a CDN, pinned, with its hash: the browser refuses a file that has been altered. -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
+          crossorigin="anonymous">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body class="d-flex flex-column min-vh-100">
+
+<nav class="navbar navbar-expand-lg bg-body-tertiary border-bottom">
+    <div class="container">
+        <a class="navbar-brand fw-semibold" th:href="@{/}">RentalHub</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav"
+                aria-controls="nav" aria-expanded="false" th:aria-label="#{nav.menu}">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="nav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item"><a class="nav-link" th:href="@{/}" th:text="#{nav.home}">Find a stay</a></li>
+                <li class="nav-item"><a class="nav-link" th:href="@{/recommendations}" th:text="#{nav.recommendations}">Ask for ideas</a></li>
+                <li class="nav-item"><a class="nav-link" th:href="@{/bookings}" th:text="#{nav.bookings}">My bookings</a></li>
+                <li class="nav-item" th:if="${currentUser != null and currentUser.host}">
+                    <a class="nav-link" th:href="@{/host/listings/new}" th:text="#{nav.newListing}">List a place</a>
+                </li>
+            </ul>
+
+            <ul class="navbar-nav">
+                <li class="nav-item dropdown" th:if="${languageLinks}">
+                    <button class="nav-link dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"
+                            th:text="#{nav.language}">Language</button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li th:each="language : ${languageLinks}">
+                            <a class="dropdown-item" th:classappend="${language.active} ? 'active'"
+                               th:href="@{${language.url}}" th:lang="${language.code}" th:text="${language.name}"
+                               th:attr="aria-current=${language.active} ? 'true' : null">English</a>
+                        </li>
+                    </ul>
+                </li>
+
+                <li class="nav-item dropdown">
+                    <button class="nav-link dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"
+                            th:text="${currentUser != null} ? #{nav.signedInAs(${currentUser.fullName})} : #{nav.signIn}">
+                        Sign in as
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li th:if="${#lists.isEmpty(demoUsers)}"><span class="dropdown-item-text text-body-secondary"
+                                                                       th:text="#{nav.noUsers}">No users yet</span></li>
+                        <li th:each="user : ${demoUsers}">
+                            <form method="post" th:action="@{/session/user}">
+                                <input type="hidden" name="userId" th:value="${user.id}">
+                                <input type="hidden" name="returnTo" th:value="${currentPath} ?: '/'">
+                                <button type="submit" class="dropdown-item d-flex justify-content-between gap-3"
+                                        th:classappend="${currentUser != null and currentUser.id == user.id} ? 'active'">
+                                    <span th:text="${user.fullName}">Asha Menon</span>
+                                    <span class="badge text-bg-secondary" th:text="#{role.__${user.role}__}">Host</span>
+                                </button>
+                            </form>
+                        </li>
+                        <li th:if="${currentUser}"><hr class="dropdown-divider"></li>
+                        <li th:if="${currentUser}">
+                            <form method="post" th:action="@{/session/user}">
+                                <input type="hidden" name="returnTo" th:value="${currentPath} ?: '/'">
+                                <button type="submit" class="dropdown-item" th:text="#{nav.signOut}">Sign out</button>
+                            </form>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div class="container mt-3" th:if="${notice}">
+    <div th:class="|alert alert-${notice.kind} mb-0|" role="status" th:text="${notice.text}">Booked!</div>
+</div>
+
+<main th:replace="${content}">Page content</main>
+
+<footer class="border-top py-3 mt-auto bg-body-tertiary">
+    <div class="container small text-body-secondary" th:text="#{footer.demo}">
+        A portfolio project. There is no login: pick a user under "Sign in as".
+    </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+        crossorigin="anonymous"></script>
+</body>
+</html>

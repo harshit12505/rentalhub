@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(${listing.title}, ~{::main})}">
+<body>
+<main class="container py-4">
+
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+        <div>
+            <h1 class="h3 mb-1" th:text="${listing.title}">Quiet garden house</h1>
+            <p class="text-body-secondary mb-0">
+                <span th:text="#{property.type.__${listing.type}__}">Type of place</span> ·
+                <span th:text="|${listing.city}, ${listing.country}|">Goa, India</span> ·
+                <span th:replace="~{fragments/cards :: rating(${rating})}">★ 4.5</span>
+            </p>
+            <p class="small mb-0" th:text="#{detail.hostedBy(${listing.host.fullName})}">Hosted by Asha Menon</p>
+        </div>
+        <form th:if="${currentUser != null and !isHost}" method="post"
+              th:action="@{/listings/{id}/favorite(id=${listing.id})}">
+            <button type="submit" class="btn" th:classappend="${saved} ? 'btn-danger' : 'btn-outline-danger'"
+                    th:attr="aria-pressed=${saved}">
+                <span aria-hidden="true" th:text="${saved} ? '♥' : '♡'">♡</span>
+                <span th:text="${saved} ? #{detail.saved} : #{detail.save}">Save</span>
+            </button>
+        </form>
+    </div>
+
+    <!--/* The photos: a carousel when there are several, a placeholder when there are none. */-->
+    <div th:if="${#lists.isEmpty(listing.images)}" class="listing-gallery listing-photo-empty rounded mb-4"
+         th:text="#{card.noPhoto}">No photo yet</div>
+    <div th:unless="${#lists.isEmpty(listing.images)}" id="gallery" class="carousel slide mb-4" data-bs-ride="false">
+        <div class="carousel-inner rounded">
+            <div class="carousel-item" th:each="image, i : ${listing.images}" th:classappend="${i.first} ? 'active'">
+                <img th:src="${image.url}" class="d-block w-100 listing-gallery"
+                     th:alt="#{detail.photoOf(${listing.title}, ${i.count})}" src="" alt="">
+            </div>
+        </div>
+        <th:block th:if="${#lists.size(listing.images) > 1}">
+            <button class="carousel-control-prev" type="button" data-bs-target="#gallery" data-bs-slide="prev">
+                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                <span class="visually-hidden" th:text="#{page.previous}">Previous</span>
+            </button>
+            <button class="carousel-control-next" type="button" data-bs-target="#gallery" data-bs-slide="next">
+                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                <span class="visually-hidden" th:text="#{page.next}">Next</span>
+            </button>
+        </th:block>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <h2 class="h5" th:text="#{detail.about}">About this place</h2>
+            <p class="listing-description" th:text="${listing.description}">A calm hideaway.</p>
+
+            <h2 class="h5 mt-4" th:text="#{detail.facts}">Details</h2>
+            <dl class="row small">
+                <dt class="col-sm-5" th:text="#{detail.sleeps}">Sleeps</dt>
+                <dd class="col-sm-7" th:text="${listing.maxGuests}">6</dd>
+                <dt class="col-sm-5" th:text="#{detail.bedrooms}">Bedrooms</dt>
+                <dd class="col-sm-7" th:text="${listing.bedrooms}">3</dd>
+                <dt class="col-sm-5" th:text="#{detail.bathrooms}">Bathrooms</dt>
+                <dd class="col-sm-7" th:text="${listing.bathrooms}">2</dd>
+                <th:block th:if="${listing.availableUntil}">
+                    <dt class="col-sm-5" th:text="#{detail.availableUntil}">Available until</dt>
+                    <dd class="col-sm-7" th:text="${#temporals.format(listing.availableUntil, 'd MMM yyyy')}">31 Dec 2027</dd>
+                </th:block>
+                <!--/* The fields only this type of property has: generic, labelled from the message files. */-->
+                <th:block th:each="fact : ${facts}">
+                    <dt class="col-sm-5" th:text="${fact.label}">Private pool</dt>
+                    <dd class="col-sm-7" th:text="${fact.value}">Yes</dd>
+                </th:block>
+            </dl>
+
+            <!--/* The host's photo tools. */-->
+            <section th:if="${isHost}" id="photos" class="mt-4">
+                <h2 class="h5" th:text="#{detail.photos}">Photos</h2>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <div th:each="image : ${listing.images}" class="photo-thumb">
+                        <img th:src="${image.url}" th:alt="${listing.title}" class="rounded" src="" alt="">
+                        <form method="post" th:action="@{/listings/{id}/photos/{imageId}/delete(id=${listing.id}, imageId=${image.id})}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger w-100 mt-1"
+                                    th:text="#{detail.removePhoto}">Remove</button>
+                        </form>
+                    </div>
+                </div>
+                <form method="post" enctype="multipart/form-data" th:action="@{/listings/{id}/photos(id=${listing.id})}"
+                      class="d-flex flex-wrap gap-2 align-items-end">
+                    <div>
+                        <label class="form-label small" for="photo" th:text="#{detail.addPhoto}">Add a photo</label>
+                        <input class="form-control" type="file" id="photo" name="file" required
+                               accept="image/jpeg,image/png,image/webp">
+                        <div class="form-text" th:text="#{detail.photoHint}">JPEG, PNG or WebP, up to 5 MB.</div>
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary mb-4" th:text="#{detail.upload}">Upload</button>
+                </form>
+            </section>
+
+            <section id="reviews" class="mt-4">
+                <h2 class="h5" th:text="#{detail.reviews}">Reviews</h2>
+                <p th:if="${#lists.isEmpty(reviews)}" class="text-body-secondary" th:text="#{detail.noReviews}">No reviews yet.</p>
+                <article th:each="r : ${reviews}" class="border-bottom py-2">
+                    <div class="d-flex justify-content-between">
+                        <strong th:text="${r.author.fullName}">Ravi Kumar</strong>
+                        <span class="text-warning" th:text="${#strings.repeat('★', r.rating)}"
+                              th:aria-label="#{detail.stars(${r.rating})}">★★★★★</span>
+                    </div>
+                    <p class="mb-0" th:if="${r.comment}" th:text="${r.comment}">Lovely stay.</p>
+                </article>
+
+                <form th:if="${currentUser != null and !isHost}" method="post" th:object="${review}"
+                      th:action="@{/listings/{id}/reviews(id=${listing.id})}" class="mt-3" novalidate>
+                    <h3 class="h6" th:text="#{detail.writeReview}">Write a review</h3>
+                    <div th:if="${#fields.hasGlobalErrors()}" class="alert alert-danger py-2" role="alert">
+                        <p class="mb-0" th:each="e : ${#fields.globalErrors()}" th:text="${e}">You can review only after a stay.</p>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-sm-3">
+                            <label class="form-label small" for="rating" th:text="#{detail.rating}">Rating</label>
+                            <select class="form-select" th:field="*{rating}" th:errorclass="is-invalid">
+                                <option th:each="n : ${#numbers.sequence(5, 1, -1)}" th:value="${n}"
+                                        th:text="${#strings.repeat('★', n)}">★★★★★</option>
+                            </select>
+                            <div class="invalid-feedback" th:errors="*{rating}">Rating must be 1 to 5.</div>
+                        </div>
+                        <div class="col-sm-9">
+                            <label class="form-label small" for="comment" th:text="#{detail.comment}">Comment</label>
+                            <textarea class="form-control" th:field="*{comment}" rows="2" th:errorclass="is-invalid"></textarea>
+                            <div class="invalid-feedback" th:errors="*{comment}">Too long.</div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary mt-2" th:text="#{detail.submitReview}">Post review</button>
+                </form>
+            </section>
+        </div>
+
+        <aside class="col-lg-4">
+            <div class="card shadow-sm booking-card">
+                <div class="card-body">
+                    <p class="h4 mb-0" th:text="${@money.format(listing.pricePerNight, listing.currency)}">9,000.00 INR</p>
+                    <p class="small text-body-secondary" th:text="#{card.perNight}">a night</p>
+                    <p th:if="${listing.displayPrice}" class="small mb-2" th:text="|≈ ${@money.format(listing.displayPrice)}|">≈ 93.79 USD</p>
+                    <form method="get" th:action="@{/listings/{id}(id=${listing.id})}" class="d-flex gap-2 mb-3">
+                        <label class="visually-hidden" for="show-in" th:text="#{detail.showIn}">Show prices in</label>
+                        <select class="form-select form-select-sm" id="show-in" name="currency">
+                            <option value="" th:text="#{detail.showIn}">Show prices in…</option>
+                            <option th:each="c : ${currencies}" th:value="${c}" th:text="${c}" th:selected="${c == currency}">USD</option>
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-outline-secondary" th:text="#{detail.show}">Show</button>
+                    </form>
+
+                    <p th:if="${currentUser == null}" class="alert alert-info mb-0" th:text="#{detail.signInToBook}">Sign in to book.</p>
+                    <p th:if="${isHost}" class="alert alert-secondary mb-0" th:text="#{detail.ownListing}">This is your listing.</p>
+                    <p th:if="${currentUser != null and !isHost and !listing.active}" class="alert alert-warning mb-0"
+                       th:text="#{booking.property.inactive}">Not taking bookings.</p>
+
+                    <form th:if="${canBook}" id="book" method="post" th:object="${booking}"
+                          th:action="@{/listings/{id}/book(id=${listing.id})}" novalidate>
+                        <h2 class="h6" th:text="#{detail.book}">Book your stay</h2>
+                        <div th:if="${#fields.hasGlobalErrors()}" class="alert alert-danger py-2" role="alert">
+                            <p class="mb-0" th:each="e : ${#fields.globalErrors()}" th:text="${e}">Those dates are taken.</p>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label small" for="checkIn" th:text="#{detail.checkIn}">Check-in</label>
+                                <input class="form-control" type="date" th:field="*{checkIn}" th:errorclass="is-invalid">
+                                <div class="invalid-feedback" th:errors="*{checkIn}">In the past.</div>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small" for="checkOut" th:text="#{detail.checkOut}">Check-out</label>
+                                <input class="form-control" type="date" th:field="*{checkOut}" th:errorclass="is-invalid">
+                                <div class="invalid-feedback" th:errors="*{checkOut}">Before check-in.</div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small" for="guests" th:text="#{detail.guests}">Guests</label>
+                                <input class="form-control" type="number" min="1" th:max="${listing.maxGuests}"
+                                       th:field="*{guests}" th:errorclass="is-invalid">
+                                <div class="invalid-feedback" th:errors="*{guests}">Too many guests.</div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small" for="paymentMethodId" th:text="#{detail.payWith}">Pay with</label>
+                                <select class="form-select" th:field="*{paymentMethodId}" th:errorclass="is-invalid">
+                                    <option th:each="card : ${testCards}" th:value="${card}"
+                                            th:text="#{payment.card.__${card}__}">Test Visa card</option>
+                                </select>
+                                <div class="invalid-feedback" th:errors="*{paymentMethodId}">Choose a card.</div>
+                                <div class="form-text" th:text="#{detail.testCardsHint}">Test cards only; nothing is charged.</div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-3" th:text="#{detail.bookButton}">Book and pay</button>
+                    </form>
+                </div>
+            </div>
+        </aside>
+    </div>
+</main>
+</body>
+</html>
